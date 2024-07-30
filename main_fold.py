@@ -134,134 +134,137 @@ class NPYIEEGDataset(Dataset):
 
 
 def main(args):
-    args.train_mode = 'pretrain' if args.pretrain and not args.finetune else 'finetune' if args.finetune and not args.pretrain else 'both'
-    args.standardize_epochs = 'channelwise'
-    
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # filenames = read_threshold_sub(args.sub_list)
-    filenames = ['class1_erp_70.npy', 'class4_ersp_70.npy']
-    if args.pretrain:
+    setup(args.local_rank, args.world_size)
+    try:
+        args.train_mode = 'pretrain' if args.pretrain and not args.finetune else 'finetune' if args.finetune and not args.pretrain else 'both'
+        args.standardize_epochs = 'channelwise'
         
-        pretrain_dataset = NPYIEEGDataset(
-            filenames=filenames,
-            chunk_len=512,
-            overlap=0,
-            normalization=args.normalization
-        )
-        
-        # Split the dataset into train and validation
-        train_size = int(0.8 * len(pretrain_dataset))
-        val_size = len(pretrain_dataset) - train_size
-        train_dataset, val_dataset = torch.utils.data.random_split(pretrain_dataset, [train_size, val_size])
-        train_sampler = DistributedSampler(train_dataset, shuffle=True)
-        val_sampler = DistributedSampler(val_dataset, shuffle=False)    
-        pretrain_loader = DataLoader(train_dataset, batch_size=args.batchsize, shuffle=True,sampler=train_sampler)
-        pretrain_val_loader = DataLoader(val_dataset, batch_size=args.batchsize, shuffle=False,sampler=val_sampler)
-        
-        output_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}'
-        print('Saving outputs in', output_path)
-        create_readme(output_path, [arg for arg in vars(args).items()])
-        
-        
-         # initialize wandb
-        wandb.init(project = 'MultiView', group = args.pretraining_setup, config = args)
-        
-        channels = 0
-        time_length = 0
-        for i,n in enumerate(pretrain_loader):
-            channels = n.shape[0]
-            time_length = n.shape[1]
-            print(i)
-            print(n.shape)
-            break
-
-        num_classes = 2  
-
-        model, loss_fn = load_model(args.pretraining_setup, device, channels, time_length, num_classes, args)
-
-        if args.load_model:
-            model.load_state_dict(torch.load(output_path, map_location=device))
-        
-        wandb.config.update({'Pretrain samples': len(pretrain_loader.dataset), 'Pretrain validation samples': len(pretrain_val_loader.dataset)})
-        
-        optimizer = AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-        os.makedirs(output_path, exist_ok=True)
-        pretrain(model,
-                 pretrain_loader,
-                 pretrain_val_loader,
-                 args.pretrain_epochs,
-                 optimizer,
-                 device,
-                 backup_path=output_path,
-                 loss_fn=loss_fn,
-                 log=True)
-
-        model.eval()
-        path = f'{output_path}/pretrained_model.pt'
-        os.makedirs(output_path, exist_ok=True)
-        torch.save(model.state_dict(), path)
-        wandb.finish()
-    if args.finetune:
-        output_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}'
-        num_classes = 2
-        print('Finetuning model')
-        
-        finetune_file_paths = ['class1_erp_30.npy', 'class4_ersp_30.npy']
-        finetune_dataset = EDFDataset(finetune_file_paths, chunk_len=512, overlap=0, normalization=True)
-        labels = [sample[1].item() for sample in finetune_dataset]
-        print('Finetuning on', len(finetune_dataset), 'samples')
-
-        folds, test_dataset = stratified_split_with_folds(finetune_dataset, labels=np.array(labels), test_ratio=0.1, n_splits=5)
-        print('Number of folds:', len(folds))
-        print('Number of test samples:', len(test_dataset))
-        test_sampler = DistributedSampler(test_dataset, shuffle=False)
-        test_loader = DataLoader(test_dataset, batch_size=args.target_batchsize, shuffle=False,sampler=test_sampler)
-
-        group = f'{args.pretraining_setup}_{args.loss}'
-        wandb.init(project='MultiView', group=group, config=args)
-
-        for fold_idx, (train_dataset, val_dataset) in enumerate(folds):
-            print(f'Starting Fold {fold_idx + 1}')
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # filenames = read_threshold_sub(args.sub_list)
+        filenames = ['class1_erp_70.npy', 'class4_ersp_70.npy']
+        if args.pretrain:
+            
+            pretrain_dataset = NPYIEEGDataset(
+                filenames=filenames,
+                chunk_len=512,
+                overlap=0,
+                normalization=args.normalization
+            )
+            
+            # Split the dataset into train and validation
+            train_size = int(0.8 * len(pretrain_dataset))
+            val_size = len(pretrain_dataset) - train_size
+            train_dataset, val_dataset = torch.utils.data.random_split(pretrain_dataset, [train_size, val_size])
             train_sampler = DistributedSampler(train_dataset, shuffle=True)
-            val_sampler = DistributedSampler(val_dataset, shuffle=False)
-            train_loader = DataLoader(train_dataset, batch_size=args.target_batchsize, shuffle=True,sampler=train_sampler)
-            val_loader = DataLoader(val_dataset, batch_size=args.target_batchsize, shuffle=False,sampler=val_sampler)
+            val_sampler = DistributedSampler(val_dataset, shuffle=False)    
+            pretrain_loader = DataLoader(train_dataset, batch_size=args.batchsize, shuffle=True,sampler=train_sampler)
+            pretrain_val_loader = DataLoader(val_dataset, batch_size=args.batchsize, shuffle=False,sampler=val_sampler)
+            
+            output_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}'
+            print('Saving outputs in', output_path)
+            create_readme(output_path, [arg for arg in vars(args).items()])
+            
+            
+            # initialize wandb
+            wandb.init(project = 'MultiView', group = args.pretraining_setup, config = args)
+            
+            channels = 0
+            time_length = 0
+            for i,n in enumerate(pretrain_loader):
+                channels = n.shape[0]
+                time_length = n.shape[1]
+                print(i)
+                print(n.shape)
+                break
 
-            model, _ = load_model(args.pretraining_setup, device, finetune_dataset[0][0].shape[1], finetune_dataset[0][0].shape[0], num_classes, args)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank)
+            num_classes = 2  
+
+            model, loss_fn = load_model(args.pretraining_setup, device, channels, time_length, num_classes, args)
+
             if args.load_model:
-                pretrained_model_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}/pretrained_model.pt'
-                model.load_state_dict(torch.load(pretrained_model_path, map_location=device))
-
-            if args.optimize_encoder:
-                optimizer = AdamW(model.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
-            else:
-                optimizer = AdamW(model.classifier.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
-
-            finetune(model,
-                    train_loader,
-                    val_loader,
-                    args.finetune_epochs,
+                model.load_state_dict(torch.load(output_path, map_location=device))
+            
+            wandb.config.update({'Pretrain samples': len(pretrain_loader.dataset), 'Pretrain validation samples': len(pretrain_val_loader.dataset)})
+            
+            optimizer = AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+            os.makedirs(output_path, exist_ok=True)
+            pretrain(model,
+                    pretrain_loader,
+                    pretrain_val_loader,
+                    args.pretrain_epochs,
                     optimizer,
-                    None,
                     device,
-                    test_loader=test_loader if args.track_test_performance and fold_idx == len(folds) - 1 else None,
-                    early_stopping_criterion=args.early_stopping_criterion,
-                    backup_path=output_path)
-        
-        if args.track_test_performance:
-            accuracy, prec, rec, f1 = evaluate_classifier(model, test_loader, device)
-            print(f'Test accuracy: {accuracy}, Precision: {prec}, Recall: {rec}, F1 Score: {f1}')
-            wandb.config.update({'Test accuracy': accuracy, 'Test precision': prec, 'Test recall': rec, 'Test f1': f1})
+                    backup_path=output_path,
+                    loss_fn=loss_fn,
+                    log=True)
 
-        wandb.finish()
+            model.eval()
+            path = f'{output_path}/pretrained_model.pt'
+            os.makedirs(output_path, exist_ok=True)
+            torch.save(model.state_dict(), path)
+            wandb.finish()
+        if args.finetune:
+            output_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}'
+            num_classes = 2
+            print('Finetuning model')
+            
+            finetune_file_paths = ['class1_erp_30.npy', 'class4_ersp_30.npy']
+            finetune_dataset = EDFDataset(finetune_file_paths, chunk_len=512, overlap=0, normalization=True)
+            labels = [sample[1].item() for sample in finetune_dataset]
+            print('Finetuning on', len(finetune_dataset), 'samples')
 
-        if args.save_model:
-            path = f'{output_path}/finetuned_model.pt'
-            if dist.get_rank() == 0:
-                # Save or load model
-                torch.save(model.state_dict(), model_path)
+            folds, test_dataset = stratified_split_with_folds(finetune_dataset, labels=np.array(labels), test_ratio=0.1, n_splits=5)
+            print('Number of folds:', len(folds))
+            print('Number of test samples:', len(test_dataset))
+            test_sampler = DistributedSampler(test_dataset, shuffle=False)
+            test_loader = DataLoader(test_dataset, batch_size=args.target_batchsize, shuffle=False,sampler=test_sampler)
 
+            group = f'{args.pretraining_setup}_{args.loss}'
+            wandb.init(project='MultiView', group=group, config=args)
+
+            for fold_idx, (train_dataset, val_dataset) in enumerate(folds):
+                print(f'Starting Fold {fold_idx + 1}')
+                train_sampler = DistributedSampler(train_dataset, shuffle=True)
+                val_sampler = DistributedSampler(val_dataset, shuffle=False)
+                train_loader = DataLoader(train_dataset, batch_size=args.target_batchsize, shuffle=True,sampler=train_sampler)
+                val_loader = DataLoader(val_dataset, batch_size=args.target_batchsize, shuffle=False,sampler=val_sampler)
+
+                model, _ = load_model(args.pretraining_setup, device, finetune_dataset[0][0].shape[1], finetune_dataset[0][0].shape[0], num_classes, args)
+                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank)
+                if args.load_model:
+                    pretrained_model_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}/pretrained_model.pt'
+                    model.load_state_dict(torch.load(pretrained_model_path, map_location=device))
+
+                if args.optimize_encoder:
+                    optimizer = AdamW(model.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
+                else:
+                    optimizer = AdamW(model.classifier.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
+
+                finetune(model,
+                        train_loader,
+                        val_loader,
+                        args.finetune_epochs,
+                        optimizer,
+                        None,
+                        device,
+                        test_loader=test_loader if args.track_test_performance and fold_idx == len(folds) - 1 else None,
+                        early_stopping_criterion=args.early_stopping_criterion,
+                        backup_path=output_path)
+            
+            if args.track_test_performance:
+                accuracy, prec, rec, f1 = evaluate_classifier(model, test_loader, device)
+                print(f'Test accuracy: {accuracy}, Precision: {prec}, Recall: {rec}, F1 Score: {f1}')
+                wandb.config.update({'Test accuracy': accuracy, 'Test precision': prec, 'Test recall': rec, 'Test f1': f1})
+
+            wandb.finish()
+
+            if args.save_model:
+                path = f'{output_path}/finetuned_model.pt'
+                if dist.get_rank() == 0:
+                    # Save or load model
+                    torch.save(model.state_dict(), model_path)
+    finally:
+        cleanup()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
