@@ -5,6 +5,7 @@ from torch.optim import AdamW
 import numpy as np
 from sklearn.utils.class_weight import compute_class_weight
 import os
+from torch.utils.data.distributed import DistributedSampler
 import wandb
 import shutil
 from torch.utils.data import DataLoader, Dataset
@@ -14,7 +15,18 @@ import datetime
 from utils import check_output_path, read_threshold_sub, load_data_bip, create_readme, stratified_split, stratified_split_with_folds
 from rich import print
 import random
-# os.environ['WANDB_DISABLED'] = 'true'
+os.environ['WANDB_DISABLED'] = 'true'
+
+import torch.distributed as dist
+
+def setup(rank, world_size):
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)
+
+def cleanup():
+    dist.destroy_process_group()
+
 
 def seed_everything(seed_value):
     torch.manual_seed(seed_value)
@@ -141,9 +153,10 @@ def main(args):
         train_size = int(0.8 * len(pretrain_dataset))
         val_size = len(pretrain_dataset) - train_size
         train_dataset, val_dataset = torch.utils.data.random_split(pretrain_dataset, [train_size, val_size])
-
-        pretrain_loader = DataLoader(train_dataset, batch_size=args.batchsize, shuffle=True)
-        pretrain_val_loader = DataLoader(val_dataset, batch_size=args.batchsize, shuffle=False)
+        train_sampler = DistributedSampler(train_dataset, shuffle=True)
+        val_sampler = DistributedSampler(val_dataset, shuffle=False)    
+        pretrain_loader = DataLoader(train_dataset, batch_size=args.batchsize, shuffle=True,sampler=train_sampler)
+        pretrain_val_loader = DataLoader(val_dataset, batch_size=args.batchsize, shuffle=False,sampler=val_sampler)
         
         output_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}'
         print('Saving outputs in', output_path)
@@ -201,17 +214,21 @@ def main(args):
         folds, test_dataset = stratified_split_with_folds(finetune_dataset, labels=np.array(labels), test_ratio=0.1, n_splits=5)
         print('Number of folds:', len(folds))
         print('Number of test samples:', len(test_dataset))
-        test_loader = DataLoader(test_dataset, batch_size=args.target_batchsize, shuffle=False)
+        test_sampler = DistributedSampler(test_dataset, shuffle=False)
+        test_loader = DataLoader(test_dataset, batch_size=args.target_batchsize, shuffle=False,sampler=test_sampler)
 
         group = f'{args.pretraining_setup}_{args.loss}'
         wandb.init(project='MultiView', group=group, config=args)
 
         for fold_idx, (train_dataset, val_dataset) in enumerate(folds):
             print(f'Starting Fold {fold_idx + 1}')
-            train_loader = DataLoader(train_dataset, batch_size=args.target_batchsize, shuffle=True)
-            val_loader = DataLoader(val_dataset, batch_size=args.target_batchsize, shuffle=False)
+            train_sampler = DistributedSampler(train_dataset, shuffle=True)
+            val_sampler = DistributedSampler(val_dataset, shuffle=False)
+            train_loader = DataLoader(train_dataset, batch_size=args.target_batchsize, shuffle=True,sampler=train_sampler)
+            val_loader = DataLoader(val_dataset, batch_size=args.target_batchsize, shuffle=False,sampler=val_sampler)
 
             model, _ = load_model(args.pretraining_setup, device, finetune_dataset[0][0].shape[1], finetune_dataset[0][0].shape[0], num_classes, args)
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank)
             if args.load_model:
                 pretrained_model_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}/pretrained_model.pt'
                 model.load_state_dict(torch.load(pretrained_model_path, map_location=device))
@@ -241,11 +258,16 @@ def main(args):
 
         if args.save_model:
             path = f'{output_path}/finetuned_model.pt'
-            torch.save(model.state_dict(), path)
+            if dist.get_rank() == 0:
+                # Save or load model
+                torch.save(model.state_dict(), model_path)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
         # training arguments
+    parser.add_argument('--local_rank', type=int, default=0)
+    parser.add_argument('--world_size', type=int, default=1)
     parser.add_argument('--job_id', type = str, default = '0')
     parser.add_argument('--seed',type=int, default=0)
     # whether or not to save finetuned models
