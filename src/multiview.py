@@ -7,6 +7,7 @@ from sklearn.metrics import balanced_accuracy_score, precision_recall_fscore_sup
 from src.losses import COCOAloss, CMCloss
 import wandb
 import os
+import tqdm
 class TimeClassifier(nn.Module):
     def __init__(self, in_features, num_classes, pool = 'adapt_avg', n_layers =1, orig_channels = 9, time_length = 33):
         super().__init__()
@@ -323,6 +324,7 @@ def pretrain(model,
             log = True):
     
     model.to(device)
+    pbar = tqdm(total=epochs, desc="Pretraining", leave=True)
     for epoch in range(epochs):
         epoch_loss = 0
         epoch_inst = 0 
@@ -338,13 +340,13 @@ def pretrain(model,
             epoch_loss += loss.item()
             epoch_inst += inst_loss.item()
             epoch_temp += temp_loss.item()
-            print(f'Epoch {epoch}, batch {i}, loss: {loss.item()}')
+            # print(f'Epoch {epoch}, batch {i}, loss: {loss.item()}')
 
         train_loss = epoch_loss/(i+1)
         train_inst = epoch_inst/(i+1)
         train_temp = epoch_temp/(i+1)
-        print(f'Epoch {epoch} train_loss: {train_loss}'
-              f' train_inst_loss: {train_inst}')
+        # print(f'Epoch {epoch} train_loss: {train_loss}'
+        #       f' train_inst_loss: {train_inst}')
         val_loss = 0
         val_inst = 0 
         val_temp = 0
@@ -370,7 +372,8 @@ def pretrain(model,
         if backup_path is not None:
             path = f'{backup_path}/pretrained_model.pt'
             torch.save(model.state_dict(), path)
-
+        pbar.update(1)
+    pbar.close()
 
 class EarlyStopping:
     """Early stops the training if validation loss doesn't improve after a given patience.
@@ -438,6 +441,7 @@ def finetune(model,
     if early_stopping_criterion is not None:
         early_stopping = EarlyStopping(patience=7, verbose=True, path = f'{backup_path}/finetuned_model.pt')
     
+    pbar = tqdm(total=epochs, desc="Finetuning", leave=True)
     for epoch in range(epochs):
         epoch_loss = 0
         model.train()
@@ -491,6 +495,7 @@ def finetune(model,
                         'val_f': np.mean(f)
                         })
         
+        pbar.update(1)
         if early_stopping is not None:
             if early_stopping_criterion == 'loss':
                 early_stopping(val_loss/(i+1), model)
@@ -500,7 +505,7 @@ def finetune(model,
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
-
+    pbar.close()
     if early_stopping is not None and early_stopping.early_stop:
         # load best model
         model.load_state_dict(torch.load(f'{backup_path}/finetuned_model.pt'))
