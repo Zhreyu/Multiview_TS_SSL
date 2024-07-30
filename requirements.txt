@@ -1,0 +1,9 @@
+dn3==1.2.1
+mne==1.7.1
+numpy==2.0.1
+pandas==2.2.2
+rich==13.7.1
+scikit_learn==1.4.0
+scipy==1.14.0
+torch==2.2.0
+wandb==0.17.5

@@ -6,7 +6,7 @@ import numpy as np
 from sklearn.metrics import balanced_accuracy_score, precision_recall_fscore_support
 from src.losses import COCOAloss, CMCloss
 import wandb
-
+import os
 class TimeClassifier(nn.Module):
     def __init__(self, in_features, num_classes, pool = 'adapt_avg', n_layers =1, orig_channels = 9, time_length = 33):
         super().__init__()
@@ -235,9 +235,12 @@ class GNNMultiview(nn.Module):
         )
 
     def forward(self, x, classify = False):
+        # print('x shape', x.shape)
         b, ch, ts = x.shape
         x = x.view(b*ch, 1, ts)
+        # print('x shape after view', x.shape)
         latents = self.wave2vec(x)
+        # print('latents shape', latents.shape)
 
         view_id = torch.arange(b).unsqueeze(1).repeat(1, ch).view(-1).to(x.device)
         message_from = torch.arange(b*ch).unsqueeze(1).repeat(1, (ch-1)).view(-1).to(x.device)
@@ -283,12 +286,16 @@ class GNNMultiview(nn.Module):
     def train_step(self, x, loss_fn, device):
         # partition the dataset into two views
         ch_size = np.random.randint(2, x.size(1)-1)
+        # print('ch_size', ch_size)
         random_channels = np.random.rand(x.size(1)).argpartition(x.size(1)-1)
+        # print('random_channels', random_channels)
         view_1_idx = random_channels[:ch_size] # randomly select ch_size channels per input
+        # print('view_1_idx', view_1_idx)
         view_2_idx = random_channels[ch_size:] # take the remaining as the second view
         #view_1 = self.take_channel(x, torch.tensor(view_1_idx).to(device))
         #view_2 = self.take_channel(x, torch.tensor(view_2_idx).to(device))
         view_1 = x[:, view_1_idx, :]
+        
         view_2 = x[:, view_2_idx, :]
 
         out1 = self.forward(view_1)
@@ -296,16 +303,15 @@ class GNNMultiview(nn.Module):
 
         out = torch.cat([out1.unsqueeze(1), out2.unsqueeze(1)], dim = 1)
         loss = loss_fn(out)
-
-        sim = torch.tensor(0)
-        avg_loss = torch.tensor(0)
-        latent_loss = torch.tensor(0)
+        # print(f'loss: {loss}')
+        # sim = torch.tensor(0)
+        # avg_loss = torch.tensor(0)
+        # latent_loss = torch.tensor(0)
 
         if isinstance(loss, tuple):
-            return *loss
+            return loss
         else:
-            return loss, *[torch.tensor(0)]*2
-
+            return (loss, torch.tensor(0), torch.tensor(0))
 def pretrain(model, 
             dataloader,
             val_dataloader,
@@ -323,7 +329,8 @@ def pretrain(model,
         epoch_temp = 0
         model.train()
         for i, data in enumerate(dataloader):
-            x = data[0].to(device).float()
+            # print('data shape', data[0].shape)
+            x = data.to(device).float()
             optimizer.zero_grad()
             loss, inst_loss, temp_loss = model.train_step(x, loss_fn, device)
             loss.backward()
@@ -331,22 +338,25 @@ def pretrain(model,
             epoch_loss += loss.item()
             epoch_inst += inst_loss.item()
             epoch_temp += temp_loss.item()
+            print(f'Epoch {epoch}, batch {i}, loss: {loss.item()}')
 
         train_loss = epoch_loss/(i+1)
         train_inst = epoch_inst/(i+1)
         train_temp = epoch_temp/(i+1)
-
+        print(f'Epoch {epoch} train_loss: {train_loss}'
+              f' train_inst_loss: {train_inst}')
         val_loss = 0
         val_inst = 0 
         val_temp = 0
 
         model.eval()
         for i, data in enumerate(val_dataloader):
-            x = data[0].to(device).float()
+            x = data.to(device).float()
             loss, inst_loss, temp_loss = model.train_step(x, loss_fn, device)
             val_loss += loss.item()
             val_inst += inst_loss.item()
             val_temp += temp_loss.item()
+            print(f'Epoch {epoch}, val batch {i}, loss: {loss.item()}')
 
         if log:
             log_dict = {'val_loss': val_loss/(i+1), 'train_loss': train_loss}
@@ -424,14 +434,16 @@ def finetune(model,
             backup_path = None):
     model.to(device)
     loss = nn.CrossEntropyLoss(weight=weights)
+    early_stopping = None
     if early_stopping_criterion is not None:
         early_stopping = EarlyStopping(patience=7, verbose=True, path = f'{backup_path}/finetuned_model.pt')
+    
     for epoch in range(epochs):
         epoch_loss = 0
         model.train()
         for i, data in enumerate(dataloader):
             x = data[0].to(device).float()
-            y = data[-1].to(device)
+            y = data[-1].to(device).view(-1)
             optimizer.zero_grad()
             out = model.forward(x, classify = True)
             loss_ = loss(out, y)
@@ -446,7 +458,7 @@ def finetune(model,
         model.eval()
         for i, data in enumerate(val_dataloader):
             x = data[0].to(device).float()
-            y = data[-1].to(device)
+            y = data[-1].to(device).view(-1)
             out = model.forward(x, classify = True)
             loss_ = loss(out, y)
             val_loss += loss_.item()
@@ -478,21 +490,22 @@ def finetune(model,
                         'val_rec': np.mean(rec), 
                         'val_f': np.mean(f)
                         })
-        if early_stopping_criterion is not None:
+        
+        if early_stopping is not None:
             if early_stopping_criterion == 'loss':
                 early_stopping(val_loss/(i+1), model)
             elif early_stopping_criterion == 'acc':
                 early_stopping(-acc, model)
+            
             if early_stopping.early_stop:
-                # load best model
-                model.load_state_dict(torch.load(f'{backup_path}/finetuned_model.pt'))
                 print("Early stopping")
                 break
 
-    if early_stopping.early_stop:
+    if early_stopping is not None and early_stopping.early_stop:
         # load best model
         model.load_state_dict(torch.load(f'{backup_path}/finetuned_model.pt'))
 
+    return model
 def evaluate_classifier(model,
                         test_loader,
                         device):
@@ -501,32 +514,25 @@ def evaluate_classifier(model,
     collect_pred = []
     for i, data in enumerate(test_loader):
         x = data[0].to(device).float()
-        y = data[-1].to(device)
+        y = data[-1].to(device).view(-1)
         out = model.forward(x, classify = True)
         collect_y.append(y.detach().cpu().numpy())
         collect_pred.append(out.argmax(dim=1).detach().cpu().numpy())
     collect_y = np.concatenate(collect_y)
     collect_pred = np.concatenate(collect_pred)
     acc = balanced_accuracy_score(collect_y, collect_pred)
-    prec, rec, f, _ = precision_recall_fscore_support(collect_y, collect_pred)
+    prec, rec, f, _ = precision_recall_fscore_support(collect_y, collect_pred,zero_division=0)
     return acc, prec, rec, f
 
 
-def load_model(pretraining_setup, device, channels, time_length, num_classes, model_args):
-    torch.manual_seed(model_args.seed)
-    if pretraining_setup == 'MPNN':
-        model = GNNMultiview(channels = 1, time_length = time_length, num_classes = num_classes, **vars(model_args)).to(device)
-    elif pretraining_setup == 'nonMPNN':
-        model = Multiview(channels = 1, orig_channels=6, time_length = time_length, num_classes = num_classes, **vars(model_args)).to(device)
-    elif pretraining_setup == 'None':
-        model = Multiview(channels = channels, orig_channels=channels, time_length = time_length, num_classes = num_classes, **vars(model_args)).to(device)
 
-        
-    if model_args.loss == 'time_loss':
-        loss_fn = CMCloss(temperature = 0.5, criterion='TS2Vec').to(device)
-    elif model_args.loss == 'contrastive':
-        loss_fn = CMCloss(temperature = 0.5, criterion='contrastive').to(device)
-    elif model_args.loss == 'COCOA':
-        loss_fn = COCOAloss(temperature = 0.5).to(device)
+def load_model(pretraining_setup, device, channels, time_length, num_classes, model_args):
+   # torch.manual_seed(model_args.seed)
+
+    model = GNNMultiview(channels = 1, time_length = time_length, num_classes = num_classes, **vars(model_args)).to(device)
+ 
+
+    loss_fn = CMCloss(temperature = 0.5, criterion='TS2Vec').to(device)
+
 
     return model, loss_fn
