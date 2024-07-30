@@ -154,8 +154,8 @@ def main(args):
         train_dataset, val_dataset = torch.utils.data.random_split(pretrain_dataset, [train_size, val_size])
         train_sampler = DistributedSampler(train_dataset, shuffle=True)
         val_sampler = DistributedSampler(val_dataset, shuffle=False)    
-        pretrain_loader = DataLoader(train_dataset, batch_size=args.batchsize, shuffle=True,sampler=train_sampler)
-        pretrain_val_loader = DataLoader(val_dataset, batch_size=args.batchsize, shuffle=False,sampler=val_sampler)
+        pretrain_loader = DataLoader(train_dataset, batch_size=args.batchsize,sampler=train_sampler)
+        pretrain_val_loader = DataLoader(val_dataset, batch_size=args.batchsize,sampler=val_sampler)
         
         output_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}'
         print('Saving outputs in', output_path)
@@ -214,7 +214,7 @@ def main(args):
         print('Number of folds:', len(folds))
         print('Number of test samples:', len(test_dataset))
         test_sampler = DistributedSampler(test_dataset, shuffle=False)
-        test_loader = DataLoader(test_dataset, batch_size=args.target_batchsize, shuffle=False,sampler=test_sampler)
+        test_loader = DataLoader(test_dataset, batch_size=args.target_batchsize,sampler=test_sampler)
 
         group = f'{args.pretraining_setup}_{args.loss}'
         wandb.init(project='MultiView', group=group, config=args)
@@ -223,8 +223,8 @@ def main(args):
             print(f'Starting Fold {fold_idx + 1}')
             train_sampler = DistributedSampler(train_dataset, shuffle=True)
             val_sampler = DistributedSampler(val_dataset, shuffle=False)
-            train_loader = DataLoader(train_dataset, batch_size=args.target_batchsize, shuffle=True,sampler=train_sampler)
-            val_loader = DataLoader(val_dataset, batch_size=args.target_batchsize, shuffle=False,sampler=val_sampler)
+            train_loader = DataLoader(train_dataset, batch_size=args.target_batchsize,sampler=train_sampler)
+            val_loader = DataLoader(val_dataset, batch_size=args.target_batchsize,sampler=val_sampler)
 
             model, _ = load_model(args.pretraining_setup, device, finetune_dataset[0][0].shape[1], finetune_dataset[0][0].shape[0], num_classes, args)
             model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank)
