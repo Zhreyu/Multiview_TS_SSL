@@ -7,7 +7,7 @@ from sklearn.metrics import balanced_accuracy_score, precision_recall_fscore_sup
 from src.losses import COCOAloss, CMCloss
 import wandb
 import os
-import tqdm
+from tqdm import tqdm  # Correct import for the tqdm progress bar
 class TimeClassifier(nn.Module):
     def __init__(self, in_features, num_classes, pool = 'adapt_avg', n_layers =1, orig_channels = 9, time_length = 33):
         super().__init__()
