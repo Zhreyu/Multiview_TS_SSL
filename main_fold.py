@@ -138,7 +138,8 @@ def main(args):
     args.train_mode = 'pretrain' if args.pretrain and not args.finetune else 'finetune' if args.finetune and not args.pretrain else 'both'
     args.standardize_epochs = 'channelwise'
     
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda", args.local_rank)
     # filenames = read_threshold_sub(args.sub_list)
     filenames = ['class1_erp_70.npy', 'class4_ersp_70.npy']
     if args.pretrain:
