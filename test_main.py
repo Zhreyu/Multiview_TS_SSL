@@ -288,7 +288,7 @@ if __name__ == '__main__':
     # Add arguments for CustomBIPDataset
     parser.add_argument('--finetune_data_paths', type=str, nargs='+', required=False, help='Paths to finetune data files')
     parser.add_argument('--chunk_len', type=int, default=512, help='Length of each chunk')
-    parser.add_argument('--num_chunks', type=int, default=34, help='Number of chunks')
+    parser.add_argument('--ft_ovlp', type=int, default=128, help='Overlap between chunks')
     parser.add_argument('--ovlp', type=int, default=51, help='Overlap between chunks')
     parser.add_argument('--normalization', type=bool, default=True, help='Whether to normalize the data')
 
