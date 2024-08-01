@@ -83,6 +83,7 @@ def main(args):
     device = torch.device("cuda", args.local_rank)
     print("Root Path is: ", args.root_path)
     filenames = read_threshold_sub(args.sub_list)
+    filenames = [os.path.join(args.root_path, fn) for fn in filenames]
     # Split data
     pretrain_files, finetune_files, test_files = split_data(filenames, test_size=0.1, finetune_size=0.2)
 
