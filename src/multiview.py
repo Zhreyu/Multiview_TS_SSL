@@ -8,6 +8,12 @@ from src.losses import COCOAloss, CMCloss
 import wandb
 import os
 from tqdm import tqdm  # Correct import for the tqdm progress bar
+
+import torch.distributed as dist
+def cleanup():
+    dist.destroy_process_group()
+    
+    
 class TimeClassifier(nn.Module):
     def __init__(self, in_features, num_classes, pool = 'adapt_avg', n_layers =1, orig_channels = 9, time_length = 33):
         super().__init__()
@@ -358,7 +364,6 @@ def pretrain(model,
             val_loss += loss.item()
             val_inst += inst_loss.item()
             val_temp += temp_loss.item()
-            print(f'Epoch {epoch}, val batch {i}, loss: {loss.item()}')
 
         if log:
             log_dict = {'val_loss': val_loss/(i+1), 'train_loss': train_loss}
@@ -374,6 +379,7 @@ def pretrain(model,
             torch.save(model.state_dict(), path)
         pbar.update(1)
     pbar.close()
+    cleanup()
 
 class EarlyStopping:
     """Early stops the training if validation loss doesn't improve after a given patience.
@@ -460,6 +466,7 @@ def finetune(model,
         collect_pred = []
 
         model.eval()
+        print("Evaluating epoch ", epoch)
         for i, data in enumerate(val_dataloader):
             x = data[0].to(device).float()
             y = data[-1].to(device).view(-1)
@@ -506,6 +513,7 @@ def finetune(model,
                 print("Early stopping")
                 break
     pbar.close()
+    cleanup()
     if early_stopping is not None and early_stopping.early_stop:
         # load best model
         model.load_state_dict(torch.load(f'{backup_path}/finetuned_model.pt'))
@@ -518,8 +526,8 @@ def evaluate_classifier(model,
     collect_y = []
     collect_pred = []
     for i, data in enumerate(test_loader):
-        x = data[0].to(device).float()
-        y = data[-1].to(device).view(-1)
+        x = data[0].to(device).float().to(device)
+        y = data[-1].to(device).view(-1).to(device)
         out = model.forward(x, classify = True)
         collect_y.append(y.detach().cpu().numpy())
         collect_pred.append(out.argmax(dim=1).detach().cpu().numpy())

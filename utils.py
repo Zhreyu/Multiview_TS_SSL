@@ -9,6 +9,21 @@ import torch
 from sklearn.model_selection import StratifiedKFold, train_test_split
 
 
+def split_data(file_paths, test_size=0.2, finetune_size=0.2):
+    """
+    Splits data into pretraining, finetuning, and test datasets.
+    `test_size` is the proportion of the data to reserve for final testing.
+    `finetune_size` is the proportion of the remaining data to use for finetuning.
+    """
+    # Split off the test dataset first
+    remaining_files, test_files = train_test_split(file_paths, test_size=test_size, random_state=42)
+
+    # Split the remaining data into pretraining and finetuning datasets
+    pretrain_files, finetune_files = train_test_split(remaining_files, test_size=finetune_size, random_state=42)
+
+    return pretrain_files, finetune_files, test_files
+
+
 def stratified_split_with_folds(dataset, labels, test_ratio=0.1, n_splits=5):
 
     train_val_indices, test_indices, _, _ = train_test_split(
