@@ -87,17 +87,17 @@ def main(args):
     pretrain_files, finetune_files, test_files = split_data(filenames, test_size=0.1, finetune_size=0.2)
 
     # Pretraining Dataset (no labels included)
-    pretrain_dataset = SyntheticDataset(pretrain_files, chunk_len=args.chunk_len, overlap=args.overlap, normalization=args.normalization, include_labels=False)
+    pretrain_dataset = SyntheticDataset(pretrain_files, chunk_len=args.chunk_len, overlap=args.ovlp, normalization=args.normalization, include_labels=False)
     pretrain_loader = DataLoader(pretrain_dataset, batch_size=args.batchsize, shuffle=True)
 
     # Finetuning Dataset (labels included)
     labels = [0 if 'class1_erp' in fn else 1 for fn in finetune_files]
-    finetune_dataset = SyntheticDataset(finetune_files, labels=labels, chunk_len=args.chunk_len, overlap=args.overlap, normalization=args.normalization, include_labels=True)
+    finetune_dataset = SyntheticDataset(finetune_files, labels=labels, chunk_len=args.chunk_len, overlap=args.ovlp, normalization=args.normalization, include_labels=True)
     finetune_loader = DataLoader(finetune_dataset, batch_size=args.batchsize, shuffle=True)
 
     # Test Dataset (labels included)
     test_labels = [0 if 'class1_erp' in fn else 1 for fn in test_files]
-    test_dataset = SyntheticDataset(test_files, labels=test_labels, chunk_len=args.chunk_len, overlap=args.overlap, normalization=args.normalization, include_labels=True)
+    test_dataset = SyntheticDataset(test_files, labels=test_labels, chunk_len=args.chunk_len, overlap=args.ovlp, normalization=args.normalization, include_labels=True)
     test_loader = DataLoader(test_dataset, batch_size=args.batchsize, shuffle=False)
 
     # Example pretraining procedure
