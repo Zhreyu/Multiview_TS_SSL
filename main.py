@@ -31,12 +31,11 @@ def main(args):
     args.standardize_epochs = 'channelwise'
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    filenames = read_threshold_sub(args.sub_list)
-    print('Number of subjects loaded:', len(filenames))
+    
     if args.pretrain:
-        
-        
-        
+        filenames = read_threshold_sub(args.sub_list)
+        print('Number of subjects loaded:', len(filenames))
+                
         pretrain_dataset = IEEGDataset(
             filenames=filenames,
             sample_keys=['inputs','labels'],
@@ -100,7 +99,7 @@ def main(args):
         print('Pretraining done. Model saved in', path)
     if args.finetune:
         print('Finetuning model')
-        all_data, event_files, subjects = load_data_bip(args.finetune_path)
+        all_data, event_files, subjects = load_data_bip(args.finetune_data_paths)
         print('Finetuning on', len(all_data), 'subjects')
 
         # List to store metrics
@@ -242,7 +241,7 @@ if __name__ == '__main__':
     parser.add_argument('--root_path', type=str, default="", help='Root path for IEEGDataset')
 
     # Add arguments for CustomBIPDataset
-    parser.add_argument('--finetune_data_paths', type=str, nargs='+', required=False, help='Paths to finetune data files')
+    parser.add_argument('--finetune_data_paths', type=str, required=False, help='Paths to finetune data files')
     parser.add_argument('--chunk_len', type=int, default=512, help='Length of each chunk')
     parser.add_argument('--ft_ovlp', type=int, default=128, help='Overlap between chunks')
     parser.add_argument('--ovlp', type=int, default=51, help='Overlap between chunks')
