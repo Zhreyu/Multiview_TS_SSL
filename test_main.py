@@ -98,9 +98,9 @@ def main(args):
     # Finetuning Dataset (labels included)
     labels = [0 if 'class1_erp' in fn else 1 for fn in finetune_files]
      
-    finetune_dataset = SyntheticDataset(finetune_files, labels=labels, chunk_len=args.chunk_len, overlap=args.ovlp, normalization=args.normalization, include_labels=True)
+    finetune_dataset = SyntheticDataset(finetune_files, labels=labels, chunk_len=args.chunk_len, overlap=args.ft_ovlp, normalization=args.normalization, include_labels=True)
     finetune_loader = DataLoader(finetune_dataset, batch_size=args.batchsize, shuffle=True,pin_memory=True,num_workers=args.num_workers)
-    chunks_per_file = [(torch.load(f)[:10].shape[1] - args.chunk_len) // (args.chunk_len - args.ovlp) + 1 for f in finetune_files]
+    chunks_per_file = [(torch.load(f)[:10].shape[1] - args.chunk_len) // (args.chunk_len - args.ft_ovlp) + 1 for f in finetune_files]
     replicated_labels = [label for label, n_chunks in zip(labels, chunks_per_file) for _ in range(n_chunks)]
     labels = replicated_labels
     
@@ -244,9 +244,9 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     
-    # training arguments
+        # training arguments
     parser.add_argument('--local_rank','--local--rank', type=int, default=0)
-    parser.add_argument('--num_workers', type=int, default=0)
+    
     parser.add_argument('--world_size', type=int, default=1)
     parser.add_argument('--job_id', type = str, default = '0')
     parser.add_argument('--seed',type=int, default=0)
@@ -305,8 +305,8 @@ if __name__ == '__main__':
     # Add arguments for CustomBIPDataset
     parser.add_argument('--finetune_data_paths', type=str, nargs='+', required=False, help='Paths to finetune data files')
     parser.add_argument('--chunk_len', type=int, default=512, help='Length of each chunk')
-    parser.add_argument('--ft_ovlp', type=int, default=128, help='Overlap between chunks')
-    parser.add_argument('--ovlp', type=int, default=51, help='Overlap between chunks')
+    parser.add_argument('--ft_ovlp', type=int, default=128, help='Overlap between chunks for finetuning dataset.')
+    parser.add_argument('--ovlp', type=int, default=51, help='Overlap between chunks for pretraining dataset.')
     parser.add_argument('--normalization', type=bool, default=True, help='Whether to normalize the data')
 
     args = parser.parse_args()
