@@ -93,22 +93,21 @@ def main(args):
 
     # Pretraining Dataset (no labels included)
     pretrain_dataset = SyntheticDataset(pretrain_files, chunk_len=args.chunk_len, overlap=args.ovlp, normalization=args.normalization, include_labels=False)
-    pretrain_loader = DataLoader(pretrain_dataset, batch_size=args.batchsize, shuffle=True)
+    pretrain_loader = DataLoader(pretrain_dataset, batch_size=args.batchsize, shuffle=True,pin_memory=True,num_workers=args.num_workers)
 
     # Finetuning Dataset (labels included)
     labels = [0 if 'class1_erp' in fn else 1 for fn in finetune_files]
-    print('Labels:', len(labels))
-    print('Finetune files:', len(finetune_files))
+     
     finetune_dataset = SyntheticDataset(finetune_files, labels=labels, chunk_len=args.chunk_len, overlap=args.ovlp, normalization=args.normalization, include_labels=True)
-    finetune_loader = DataLoader(finetune_dataset, batch_size=args.batchsize, shuffle=True)
+    finetune_loader = DataLoader(finetune_dataset, batch_size=args.batchsize, shuffle=True,pin_memory=True,num_workers=args.num_workers)
     chunks_per_file = [(torch.load(f)[:10].shape[1] - args.chunk_len) // (args.chunk_len - args.ovlp) + 1 for f in finetune_files]
     replicated_labels = [label for label, n_chunks in zip(labels, chunks_per_file) for _ in range(n_chunks)]
-    print('Replicated labels:', len(replicated_labels))
     labels = replicated_labels
+    
     # Test Dataset (labels included)
     test_labels = [0 if 'class1_erp' in fn else 1 for fn in test_files]
     test_dataset = SyntheticDataset(test_files, labels=test_labels, chunk_len=args.chunk_len, overlap=args.ovlp, normalization=args.normalization, include_labels=True)
-    test_loader = DataLoader(test_dataset, batch_size=args.batchsize, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=args.batchsize, shuffle=False,pin_memory=True,num_workers=args.num_workers)
     chunks_per_file = [(torch.load(f)[:10].shape[1] - args.chunk_len) // (args.chunk_len - args.ovlp) + 1 for f in test_files]
     replicated_labels = [label for label, n_chunks in zip(labels, chunks_per_file) for _ in range(n_chunks)]
     test_labels = replicated_labels
@@ -127,8 +126,8 @@ def main(args):
         val_sampler = DistributedSampler(val_dataset, shuffle=False)
         
         # Create dataloaders    
-        pretrain_loader = DataLoader(train_dataset, batch_size=args.batchsize,sampler=train_sampler)
-        pretrain_val_loader = DataLoader(val_dataset, batch_size=args.batchsize,sampler=val_sampler)
+        pretrain_loader = DataLoader(train_dataset, batch_size=args.batchsize,sampler=train_sampler,pin_memory=True,num_workers=args.num_workers)
+        pretrain_val_loader = DataLoader(val_dataset, batch_size=args.batchsize,sampler=val_sampler,pin_memory=True,num_workers=args.num_workers)
         
         output_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}'
         print('Saving outputs in', output_path)
@@ -192,7 +191,7 @@ def main(args):
         print('Number of test samples:', len(test_dataset))
         print("Length of Lables",len(labels))
         test_sampler = DistributedSampler(test_dataset, shuffle=False)
-        test_loader = DataLoader(test_dataset, batch_size=args.target_batchsize,sampler=test_sampler)
+        test_loader = DataLoader(test_dataset, batch_size=args.target_batchsize,sampler=test_sampler,pin_memory=True,num_workers=args.num_workers)
 
         group = f'{args.pretraining_setup}_{args.loss}'
         wandb.init(project='MultiView', group=group, config=args)
@@ -201,8 +200,8 @@ def main(args):
             print(f'Starting Fold {fold_idx + 1}')
             train_sampler = DistributedSampler(train_dataset, shuffle=True)
             val_sampler = DistributedSampler(val_dataset, shuffle=False)
-            train_loader = DataLoader(train_dataset, batch_size=args.target_batchsize,sampler=train_sampler)
-            val_loader = DataLoader(val_dataset, batch_size=args.target_batchsize,sampler=val_sampler)
+            train_loader = DataLoader(train_dataset, batch_size=args.target_batchsize,sampler=train_sampler,pin_memory=True,num_workers=args.num_workers)
+            val_loader = DataLoader(val_dataset, batch_size=args.target_batchsize,sampler=val_sampler,pin_memory=True,num_workers=args.num_workers)
 
             model, _ = load_model(args.pretraining_setup, device, finetune_dataset[0][0].shape[1], finetune_dataset[0][0].shape[0], num_classes, args)
             model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
@@ -245,9 +244,9 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     
-        # training arguments
+    # training arguments
     parser.add_argument('--local_rank','--local--rank', type=int, default=0)
-    
+    parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--world_size', type=int, default=1)
     parser.add_argument('--job_id', type = str, default = '0')
     parser.add_argument('--seed',type=int, default=0)
