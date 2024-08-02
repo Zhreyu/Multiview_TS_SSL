@@ -232,6 +232,7 @@ def main(args):
             wandb.config.update({'Test accuracy': accuracy, 'Test precision': prec, 'Test recall': rec, 'Test f1': f1})
 
         wandb.finish()
+        cleanup()
 
         if args.save_model:
             path = f'{output_path}/finetuned_model.pt'

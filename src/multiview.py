@@ -513,7 +513,6 @@ def finetune(model,
                 print("Early stopping")
                 break
     pbar.close()
-    cleanup()
     if early_stopping is not None and early_stopping.early_stop:
         # load best model
         model.load_state_dict(torch.load(f'{backup_path}/finetuned_model.pt'))
