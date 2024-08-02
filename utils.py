@@ -24,31 +24,31 @@ def split_data(file_paths, test_size=0.2, finetune_size=0.2):
     return pretrain_files, finetune_files, test_files
 
 
-def stratified_split_with_folds(dataset, labels, test_ratio=0.1, n_splits=5):
+def stratified_split_with_folds(dataset, labels, n_splits=5):
+    """
+    Function to create stratified K-folds for cross-validation.
+    Args:
+        dataset: The complete dataset from which to create folds.
+        labels: Corresponding labels for the dataset.
+        n_splits: Number of folds to create.
 
-    train_val_indices, test_indices, _, _ = train_test_split(
-        range(len(dataset)), labels, test_size=test_ratio, stratify=labels, random_state=42
-    )
-
-    test_dataset = torch.utils.data.Subset(dataset, test_indices)
-
-    # Data for cross-validation (train/val)
-    train_val_labels = labels[train_val_indices]
+    Returns:
+        A list of tuples, where each tuple contains a training subset and a validation subset of the dataset.
+    """
 
     # Prepare stratified K-folds
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
     folds = []
-    for train_idx, val_idx in skf.split(train_val_indices, train_val_labels):
-        # Convert indices to dataset indices
-        train_dataset_indices = [train_val_indices[i] for i in train_idx]
-        val_dataset_indices = [train_val_indices[i] for i in val_idx]
 
-        # Create subsets
-        train_dataset = torch.utils.data.Subset(dataset, train_dataset_indices)
-        val_dataset = torch.utils.data.Subset(dataset, val_dataset_indices)
+    # Since the indices for stratified K-fold are based on labels, directly use dataset indices
+    for train_idx, val_idx in skf.split(dataset, labels):
+        # Create subsets for training and validation using the indices provided by StratifiedKFold
+        train_dataset = torch.utils.data.Subset(dataset, train_idx)
+        val_dataset = torch.utils.data.Subset(dataset, val_idx)
+        
         folds.append((train_dataset, val_dataset))
 
-    return folds, test_dataset
+    return folds
 
 
 def stratified_split(dataset, train_ratio, val_ratio, test_ratio, labels):

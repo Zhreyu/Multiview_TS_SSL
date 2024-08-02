@@ -171,9 +171,10 @@ def main(args):
         
         print('Finetuning on', len(finetune_dataset), 'samples')
 
-        folds, test_dataset = stratified_split_with_folds(finetune_dataset, labels=np.array(labels), test_ratio=0.1, n_splits=5)
+        folds  = stratified_split_with_folds(finetune_dataset, labels=np.array(labels), test_ratio=0.1, n_splits=5)
         print('Number of folds:', len(folds))
         print('Number of test samples:', len(test_dataset))
+        print("Length of Lables",len(labels))
         test_sampler = DistributedSampler(test_dataset, shuffle=False)
         test_loader = DataLoader(test_dataset, batch_size=args.target_batchsize,sampler=test_sampler)
 
