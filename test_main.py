@@ -171,7 +171,7 @@ def main(args):
         
         print('Finetuning on', len(finetune_dataset), 'samples')
 
-        folds  = stratified_split_with_folds(finetune_dataset, labels=np.array(labels), test_ratio=0.1, n_splits=5)
+        folds  = stratified_split_with_folds(finetune_dataset, labels=np.array(labels), n_splits=5)
         print('Number of folds:', len(folds))
         print('Number of test samples:', len(test_dataset))
         print("Length of Lables",len(labels))
