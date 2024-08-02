@@ -93,6 +93,8 @@ def main(args):
 
     # Finetuning Dataset (labels included)
     labels = [0 if 'class1_erp' in fn else 1 for fn in finetune_files]
+    print('Labels:', len(labels))
+    print('Finetune files:', len(finetune_files))
     finetune_dataset = SyntheticDataset(finetune_files, labels=labels, chunk_len=args.chunk_len, overlap=args.ovlp, normalization=args.normalization, include_labels=True)
     finetune_loader = DataLoader(finetune_dataset, batch_size=args.batchsize, shuffle=True)
 
@@ -101,13 +103,10 @@ def main(args):
     test_dataset = SyntheticDataset(test_files, labels=test_labels, chunk_len=args.chunk_len, overlap=args.ovlp, normalization=args.normalization, include_labels=True)
     test_loader = DataLoader(test_dataset, batch_size=args.batchsize, shuffle=False)
 
-    # Example pretraining procedure
-    print("Pretraining with {} samples.".format(len(pretrain_loader.dataset)))
+    # print("Pretraining with {} samples.".format(len(pretrain_loader.dataset)))
 
-    # Example finetuning procedure
     print("Finetuning with {} samples.".format(len(finetune_loader.dataset)))
 
-    # Example testing procedure
     print("Testing with {} samples.".format(len(test_loader.dataset)))
     if args.pretrain:
                
