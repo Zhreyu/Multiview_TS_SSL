@@ -75,7 +75,8 @@ def main(args):
         model, loss_fn = load_model(args.pretraining_setup, device, channels, time_length, num_classes, args)
 
         if args.load_model:
-            model.load_state_dict(torch.load(output_path, map_location=device))
+            model_path = args.pretrained_model_path
+            model.load_state_dict(torch.load(model_path, map_location=device))
         
         wandb.config.update({'Pretrain samples': len(pretrain_loader.dataset), 'Pretrain validation samples': len(pretrain_val_loader.dataset)})
         
@@ -136,7 +137,7 @@ def main(args):
             wandb.init(project='MultiView', group=group, config=args)
             
             if args.load_model:
-                model_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}/pretrained_model.pt'
+                model_path = args.pretrained_model_path
                 model.load_state_dict(torch.load(model_path, map_location=device))
 
             model, _ = load_model(args.pretraining_setup, device, train_dataset[0][0].shape[1], train_dataset[0][0].shape[0], 2, args)
@@ -235,7 +236,7 @@ if __name__ == '__main__':
     parser.add_argument('--batchsize', type = int, default = 128)
     parser.add_argument('--target_batchsize', type = int, default = 128)
     parser.add_argument('--num_workers', type = int, default = 0)
-
+    parser.add_argument('--pretrained_model_path', type = str, default = 'pretrained_models/MultiView_MPNN_time_loss/pretrained_model.pt')
     # Add new arguments for IEEGDataset
     parser.add_argument('--sub_list', type=str, required=False, help='Paths to pretrain data files')
     parser.add_argument('--root_path', type=str, default="", help='Root path for IEEGDataset')

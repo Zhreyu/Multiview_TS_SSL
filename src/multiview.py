@@ -11,7 +11,8 @@ from tqdm import tqdm  # Correct import for the tqdm progress bar
 
 import torch.distributed as dist
 def cleanup():
-    dist.destroy_process_group()
+    if dist.is_initialized():
+        dist.destroy_process_group()
     
     
 class TimeClassifier(nn.Module):
