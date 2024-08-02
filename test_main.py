@@ -19,10 +19,14 @@ os.environ['WANDB_DISABLED'] = 'true'
 # local_rank = int(os.environ["LOCAL_RANK"])
 import torch.distributed as dist
 
-
 def setup(rank, world_size):
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)
-    torch.cuda.set_device(rank)
+    dist.init_process_group(
+        backend='nccl',       # or 'gloo' or 'mpi' depending on your environment and requirements
+        init_method='env://', # often used, but depends on your specific setup
+        rank=rank,
+        world_size=world_size
+    )
+    torch.cuda.set_device(rank)  # if using GPU
 
 def cleanup():
     dist.destroy_process_group()
@@ -75,7 +79,7 @@ class SyntheticDataset(Dataset):
 
 def main(args):
     
-    
+    setup(args.local_rank, args.world_size)
     args.train_mode = 'pretrain' if args.pretrain and not args.finetune else 'finetune' if args.finetune and not args.pretrain else 'both'
     args.standardize_epochs = 'channelwise'
     
@@ -313,7 +317,6 @@ if __name__ == '__main__':
     print("\Input arguments:")
     for arg, value in vars(args).items():
         print(f"  {arg}: {value}")
-    dist.init_process_group("nccl", rank=args.local_rank, world_size=args.world_size)
     main(args)
     current_time = datetime.datetime.now()
     print("\nScript ends at: ", current_time.strftime("%H:%M:%S"))
