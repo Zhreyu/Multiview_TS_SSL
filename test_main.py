@@ -232,14 +232,13 @@ def main(args):
             wandb.config.update({'Test accuracy': accuracy, 'Test precision': prec, 'Test recall': rec, 'Test f1': f1})
 
         wandb.finish()
-        cleanup()
-
+        
         if args.save_model:
             path = f'{output_path}/finetuned_model.pt'
-            if dist.get_rank() == 0:
                 # Save or load model
-                torch.save(model.state_dict(), model_path)
-    
+            torch.save(model.state_dict(), model_path)
+
+        cleanup()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
