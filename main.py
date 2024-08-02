@@ -105,6 +105,11 @@ def main(args):
 
         # List to store metrics
         metrics_list = []
+        model, _ = load_model(args.pretraining_setup, device, train_dataset[0][0].shape[1], train_dataset[0][0].shape[0], 2, args)
+        
+        if args.load_model:
+            model_path = args.pretrained_model_path
+            model.load_state_dict(torch.load(model_path, map_location=device))
 
         for i in range(len(all_data)):
             print(f'Fold {i+1}/{len(all_data)}')
@@ -136,12 +141,6 @@ def main(args):
             group = f'{args.pretraining_setup}_{args.loss}'
             wandb.init(project='MultiView', group=group, config=args)
             
-            if args.load_model:
-                model_path = args.pretrained_model_path
-                model.load_state_dict(torch.load(model_path, map_location=device))
-
-            model, _ = load_model(args.pretraining_setup, device, train_dataset[0][0].shape[1], train_dataset[0][0].shape[0], 2, args)
-
             optimizer = AdamW(model.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay) if args.optimize_encoder else AdamW(model.classifier.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
 
             output_path = check_output_path(f'finetuned_models/MultiView_{args.pretraining_setup}_{args.loss}')
