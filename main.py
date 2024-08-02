@@ -111,7 +111,7 @@ def main(args):
             val_files = [all_data[i]]
             train_events = event_files[:i] + event_files[i+1:]
             val_events = [event_files[i]]
-            print("Valdiation Subject Path : ",val_files)
+            print("Valdiation Subject Path: ",val_files)
             train_dataset = CustomBIPDataset(
                 file_paths=train_files,
                 labels=train_events,
@@ -259,4 +259,3 @@ if __name__ == '__main__':
     main(args)
     current_time = datetime.datetime.now()
     print("\nScript ends at: ", current_time.strftime("%H:%M:%S"))
-    cleanup()
