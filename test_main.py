@@ -97,12 +97,17 @@ def main(args):
     print('Finetune files:', len(finetune_files))
     finetune_dataset = SyntheticDataset(finetune_files, labels=labels, chunk_len=args.chunk_len, overlap=args.ovlp, normalization=args.normalization, include_labels=True)
     finetune_loader = DataLoader(finetune_dataset, batch_size=args.batchsize, shuffle=True)
-
+    chunks_per_file = [(torch.load(f)[:10].shape[1] - args.chunk_len) // (args.chunk_len - args.ovlp) + 1 for f in finetune_files]
+    replicated_labels = [label for label, n_chunks in zip(labels, chunks_per_file) for _ in range(n_chunks)]
+    print('Replicated labels:', len(replicated_labels))
+    labels = replicated_labels
     # Test Dataset (labels included)
     test_labels = [0 if 'class1_erp' in fn else 1 for fn in test_files]
     test_dataset = SyntheticDataset(test_files, labels=test_labels, chunk_len=args.chunk_len, overlap=args.ovlp, normalization=args.normalization, include_labels=True)
     test_loader = DataLoader(test_dataset, batch_size=args.batchsize, shuffle=False)
-
+    chunks_per_file = [(torch.load(f)[:10].shape[1] - args.chunk_len) // (args.chunk_len - args.ovlp) + 1 for f in test_files]
+    replicated_labels = [label for label, n_chunks in zip(labels, chunks_per_file) for _ in range(n_chunks)]
+    test_labels = replicated_labels
     # print("Pretraining with {} samples.".format(len(pretrain_loader.dataset)))
 
     print("Finetuning with {} samples.".format(len(finetune_loader.dataset)))
