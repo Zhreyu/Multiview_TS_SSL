@@ -12,16 +12,21 @@ from torch.utils.data import DataLoader, Dataset
 from src.downstream_dataset import CustomBIPDataset
 import pandas as pd
 import datetime
-from utils import check_output_path, read_threshold_sub, load_data_bip, create_readme, stratified_split, stratified_split_with_folds
+from utils import check_output_path, read_threshold_sub, load_data_bip, create_readme, stratified_split, stratified_split_with_folds,split_data
 from rich import print
 import random
 os.environ['WANDB_DISABLED'] = 'true'
-local_rank = int(os.environ["LOCAL_RANK"])
+# local_rank = int(os.environ["LOCAL_RANK"])
 import torch.distributed as dist
 
 def setup(rank, world_size):
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)
-    torch.cuda.set_device(rank)
+    dist.init_process_group(
+        backend='nccl',       # or 'gloo' or 'mpi' depending on your environment and requirements
+        init_method='env://', # often used, but depends on your specific setup
+        rank=rank,
+        world_size=world_size
+    )
+    torch.cuda.set_device(rank)  # if using GPU
 
 def cleanup():
     dist.destroy_process_group()
@@ -34,129 +39,94 @@ def seed_everything(seed_value):
     os.environ["PYTHONHASHSEED"] = str(seed_value)
     print("\nSeed is set to:", seed_value)
 
-class EDFDataset(Dataset):
-    def __init__(self, file_paths, chunk_len=512, overlap=124, normalization=True, segment='train'):
+class SyntheticDataset(Dataset):
+    def __init__(self, file_paths, labels=None, chunk_len=512, overlap=124, normalization=True, include_labels=False):
+        self.file_paths = file_paths
+        self.labels = labels if labels is not None else [-1] * len(file_paths)  # Dummy labels if not provided
         self.chunk_len = chunk_len
         self.overlap = overlap
         self.normalization = normalization
-        self.segment = segment
-
-        self.data = []
-        self.labels = []
-        self.data_indices = []
-
-        for path in file_paths:
-            data = np.load(path)[:10]  # Slice to only use the first 10 channels
-            label = 0 if 'class1_erp' in path else 1
-
-            if self.normalization:
-                data = self.safe_normalize(data)
-
-            M = data.shape[1]
-            total_length = M
-            test_start = int(0.95 * total_length) if self.segment == 'test' else 0
-            test_end = total_length if self.segment == 'test' else int(0.95 * total_length)
-            
-            stride = self.chunk_len - self.overlap
-            for start in range(test_start, test_end - self.chunk_len + 1, stride):
-                self.data.append(data[:, start:start + self.chunk_len])
-                self.labels.append(label)
-
-        self.data_indices = list(range(len(self.data)))
-
-    def safe_normalize(self, data):
-        mean = np.mean(data, axis=1, keepdims=True)
-        std = np.std(data, axis=1, keepdims=True)
-        std[std == 0] = 1
-        return (data - mean) / std
-
-    def __len__(self):
-        return len(self.data_indices)
-
-    def __getitem__(self, index):
-        data = self.data[index]
-        label = self.labels[index]
-        data_tensor = torch.tensor(data, dtype=torch.float).transpose(0, 1)
-        label_tensor = torch.tensor(label, dtype=torch.long)
-        return data_tensor, label_tensor.unsqueeze(0)
-
-class NPYIEEGDataset(Dataset):
-    def __init__(self, filenames, chunk_len=512, overlap=51, normalization=True):
-        self.filenames = filenames
-        self.chunk_len = chunk_len
-        self.overlap = overlap
-        self.normalization = normalization
+        self.include_labels = include_labels
         self.data_indices = self._create_data_indices()
+
+    def _create_data_indices(self):
+        indices = []
+        for file_idx, filename in enumerate(self.file_paths):
+            data = torch.load(filename)[:10]  # Load tensor and take first 10 channels
+            num_chunks = (data.shape[1] - self.chunk_len) // (self.chunk_len - self.overlap) + 1
+            for i in range(num_chunks):
+                start_idx = i * (self.chunk_len - self.overlap)
+                indices.append((file_idx, start_idx))
+        return indices
 
     def __len__(self):
         return len(self.data_indices)
 
     def __getitem__(self, index):
         file_idx, start_idx = self.data_indices[index]
-        filename = self.filenames[file_idx]
-        
-        # Load the numpy array and slice to the first 10 channels
-        array_data = np.load(filename)[:10]
-        
-        # Calculate end index ensuring it does not exceed the bounds of the data
-        end_idx = min(start_idx + self.chunk_len, array_data.shape[1])
-        signal = array_data[:, start_idx:end_idx]
-
-        # Handle cases where the extracted chunk is smaller than expected
-        if signal.shape[1] < self.chunk_len:
-            padding = np.zeros((signal.shape[0], self.chunk_len - signal.shape[1]))
-            signal = np.concatenate((signal, padding), axis=1)
-
-        # Normalize the signal if required
+        data = torch.load(self.file_paths[file_idx])[:10, start_idx:start_idx + self.chunk_len]
         if self.normalization:
-            mean = signal.mean(axis=1, keepdims=True)
-            std = signal.std(axis=1, keepdims=True)
-            std[std == 0] = 1  # avoid division by zero
-            signal = (signal - mean) / std
+            mean = data.mean(dim=1, keepdim=True)
+            std = data.std(dim=1, keepdim=True)
+            std[std == 0] = 1  # Prevent division by zero
+            data = (data - mean) / std
+        if self.include_labels:
+            label = self.labels[file_idx]
+            return data, torch.tensor(label, dtype=torch.long)
+        return data
 
-        # Convert the signal to a PyTorch tensor
-        signal = torch.tensor(signal, dtype=torch.float32)
-
-        return signal
-
-    def _create_data_indices(self):
-        data_indices = []
-        for file_idx, filename in enumerate(self.filenames):
-            array_data = np.load(filename)[:10]
-            total_len = array_data.shape[1]
-            stride = self.chunk_len - self.overlap
-            num_chunks = (total_len - self.chunk_len) // stride + 1
-            for i in range(num_chunks):
-                start_idx = i * stride
-                data_indices.append((file_idx, start_idx))
-        return data_indices
 
 
 def main(args):
     
-    
+    setup(args.local_rank, args.world_size)
     args.train_mode = 'pretrain' if args.pretrain and not args.finetune else 'finetune' if args.finetune and not args.pretrain else 'both'
     args.standardize_epochs = 'channelwise'
     
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device = torch.device("cuda", args.local_rank)
-    # filenames = read_threshold_sub(args.sub_list)
-    filenames = ['class1_erp_70.npy', 'class4_ersp_70.npy']
+    print("Root Path is: ", args.root_path)
+    filenames = read_threshold_sub(args.sub_list)
+    filenames = [os.path.join(args.root_path, fn) for fn in filenames]
+    # Split data
+    pretrain_files, finetune_files, test_files = split_data(filenames, test_size=0.1, finetune_size=0.2)
+
+    # Pretraining Dataset (no labels included)
+    pretrain_dataset = SyntheticDataset(pretrain_files, chunk_len=args.chunk_len, overlap=args.ovlp, normalization=args.normalization, include_labels=False)
+    pretrain_loader = DataLoader(pretrain_dataset, batch_size=args.batchsize, shuffle=True)
+
+    # Finetuning Dataset (labels included)
+    labels = [0 if 'class1_erp' in fn else 1 for fn in finetune_files]
+    print('Labels:', len(labels))
+    print('Finetune files:', len(finetune_files))
+    finetune_dataset = SyntheticDataset(finetune_files, labels=labels, chunk_len=args.chunk_len, overlap=args.ovlp, normalization=args.normalization, include_labels=True)
+    finetune_loader = DataLoader(finetune_dataset, batch_size=args.batchsize, shuffle=True)
+    chunks_per_file = [(torch.load(f)[:10].shape[1] - args.chunk_len) // (args.chunk_len - args.ovlp) + 1 for f in finetune_files]
+    replicated_labels = [label for label, n_chunks in zip(labels, chunks_per_file) for _ in range(n_chunks)]
+    print('Replicated labels:', len(replicated_labels))
+    labels = replicated_labels
+    # Test Dataset (labels included)
+    test_labels = [0 if 'class1_erp' in fn else 1 for fn in test_files]
+    test_dataset = SyntheticDataset(test_files, labels=test_labels, chunk_len=args.chunk_len, overlap=args.ovlp, normalization=args.normalization, include_labels=True)
+    test_loader = DataLoader(test_dataset, batch_size=args.batchsize, shuffle=False)
+    chunks_per_file = [(torch.load(f)[:10].shape[1] - args.chunk_len) // (args.chunk_len - args.ovlp) + 1 for f in test_files]
+    replicated_labels = [label for label, n_chunks in zip(labels, chunks_per_file) for _ in range(n_chunks)]
+    test_labels = replicated_labels
+    # print("Pretraining with {} samples.".format(len(pretrain_loader.dataset)))
+
+    print("Finetuning with {} samples.".format(len(finetune_loader.dataset)))
+
+    print("Testing with {} samples.".format(len(test_loader.dataset)))
     if args.pretrain:
-        
-        pretrain_dataset = NPYIEEGDataset(
-            filenames=filenames,
-            chunk_len=512,
-            overlap=0,
-            normalization=args.normalization
-        )
-        
+               
         # Split the dataset into train and validation
         train_size = int(0.8 * len(pretrain_dataset))
         val_size = len(pretrain_dataset) - train_size
         train_dataset, val_dataset = torch.utils.data.random_split(pretrain_dataset, [train_size, val_size])
         train_sampler = DistributedSampler(train_dataset, shuffle=True)
-        val_sampler = DistributedSampler(val_dataset, shuffle=False)    
+        val_sampler = DistributedSampler(val_dataset, shuffle=False)
+        
+        # Create dataloaders    
         pretrain_loader = DataLoader(train_dataset, batch_size=args.batchsize,sampler=train_sampler)
         pretrain_val_loader = DataLoader(val_dataset, batch_size=args.batchsize,sampler=val_sampler)
         
@@ -180,15 +150,22 @@ def main(args):
         num_classes = 2  
 
         model, loss_fn = load_model(args.pretraining_setup, device, channels, time_length, num_classes, args)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
+
 
         if args.load_model:
             model.load_state_dict(torch.load(output_path, map_location=device))
         
         wandb.config.update({'Pretrain samples': len(pretrain_loader.dataset), 'Pretrain validation samples': len(pretrain_val_loader.dataset)})
         
-        optimizer = AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+        if args.optimize_encoder:
+            optimizer = AdamW(model.parameters(), lr = args.ft_learning_rate, weight_decay=args.weight_decay)
+        else:
+            optimizer = AdamW(model.module.classifier.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
+            
+        # optimizer = AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         os.makedirs(output_path, exist_ok=True)
-        pretrain(model,
+        pretrain(model.module,
                 pretrain_loader,
                 pretrain_val_loader,
                 args.pretrain_epochs,
@@ -208,14 +185,12 @@ def main(args):
         num_classes = 2
         print('Finetuning model')
         
-        finetune_file_paths = ['class1_erp_30.npy', 'class4_ersp_30.npy']
-        finetune_dataset = EDFDataset(finetune_file_paths, chunk_len=512, overlap=0, normalization=True)
-        labels = [sample[1].item() for sample in finetune_dataset]
         print('Finetuning on', len(finetune_dataset), 'samples')
 
-        folds, test_dataset = stratified_split_with_folds(finetune_dataset, labels=np.array(labels), test_ratio=0.1, n_splits=5)
+        folds  = stratified_split_with_folds(finetune_dataset, labels=np.array(labels), n_splits=5)
         print('Number of folds:', len(folds))
         print('Number of test samples:', len(test_dataset))
+        print("Length of Lables",len(labels))
         test_sampler = DistributedSampler(test_dataset, shuffle=False)
         test_loader = DataLoader(test_dataset, batch_size=args.target_batchsize,sampler=test_sampler)
 
@@ -230,7 +205,8 @@ def main(args):
             val_loader = DataLoader(val_dataset, batch_size=args.target_batchsize,sampler=val_sampler)
 
             model, _ = load_model(args.pretraining_setup, device, finetune_dataset[0][0].shape[1], finetune_dataset[0][0].shape[0], num_classes, args)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank)
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
+
             if args.load_model:
                 pretrained_model_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}/pretrained_model.pt'
                 model.load_state_dict(torch.load(pretrained_model_path, map_location=device))
@@ -238,7 +214,8 @@ def main(args):
             if args.optimize_encoder:
                 optimizer = AdamW(model.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
             else:
-                optimizer = AdamW(model.classifier.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
+                optimizer = AdamW(model.module.classifier.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
+
 
             finetune(model,
                     train_loader,
@@ -257,13 +234,13 @@ def main(args):
             wandb.config.update({'Test accuracy': accuracy, 'Test precision': prec, 'Test recall': rec, 'Test f1': f1})
 
         wandb.finish()
-
+        
         if args.save_model:
             path = f'{output_path}/finetuned_model.pt'
-            if dist.get_rank() == 0:
                 # Save or load model
-                torch.save(model.state_dict(), model_path)
-    
+            torch.save(model.state_dict(), path)
+
+        cleanup()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -284,12 +261,12 @@ if __name__ == '__main__':
     parser.add_argument('--train_mode', type = str)
     # data arguments
     # path to config files. Remember to change paths in config files. 
-    parser.add_argument('--data_path', type = str, default = 'sleepps18.yml')
-    parser.add_argument('--finetune_path', type = str, default = 'sleepedf.yml')
-    # whether or not to sample balanced during finetuning
-    parser.add_argument('--balanced_sampling', type = str, default = 'finetune')
-    # number of samples to finetune on. Can be list for multiple runs
-    parser.add_argument('--sample_generator', type = eval, nargs = '+', default = [10, 20, None])
+    # parser.add_argument('--data_path', type = str, default = 'sleepps18.yml')
+    # parser.add_argument('--finetune_path', type = str, default = 'sleepedf.yml')
+    # # whether or not to sample balanced during finetuning
+    # parser.add_argument('--balanced_sampling', type = str, default = 'finetune')
+    # # number of samples to finetune on. Can be list for multiple runs
+    # parser.add_argument('--sample_generator', type = eval, nargs = '+', default = [10, 20, None])
 
     # model arguments
     parser.add_argument('--layers', type = int, default = 6)
@@ -305,10 +282,10 @@ if __name__ == '__main__':
 
     # eeg arguments
     # subsample number of subjects. If set to False, use all subjects, else set to integer
-    parser.add_argument('--sample_pretrain_subjects', type = eval, default = False)
-    parser.add_argument('--sample_finetune_train_subjects', type = eval, default = False)
-    parser.add_argument('--sample_finetune_val_subjects', type = eval, default = False)
-    parser.add_argument('--sample_test_subjects', type = eval, default = False)
+    # parser.add_argument('--sample_pretrain_subjects', type = eval, default = False)
+    # parser.add_argument('--sample_finetune_train_subjects', type = eval, default = False)
+    # parser.add_argument('--sample_finetune_val_subjects', type = eval, default = False)
+    # parser.add_argument('--sample_test_subjects', type = eval, default = False)
 
     # optimizer arguments
     parser.add_argument('--loss', type = str, default = 'time_loss', )#ptions = ['time_loss', 'contrastive', 'COCOA'])
@@ -329,7 +306,7 @@ if __name__ == '__main__':
     # Add arguments for CustomBIPDataset
     parser.add_argument('--finetune_data_paths', type=str, nargs='+', required=False, help='Paths to finetune data files')
     parser.add_argument('--chunk_len', type=int, default=512, help='Length of each chunk')
-    parser.add_argument('--num_chunks', type=int, default=34, help='Number of chunks')
+    parser.add_argument('--ft_ovlp', type=int, default=128, help='Overlap between chunks')
     parser.add_argument('--ovlp', type=int, default=51, help='Overlap between chunks')
     parser.add_argument('--normalization', type=bool, default=True, help='Whether to normalize the data')
 
@@ -342,7 +319,6 @@ if __name__ == '__main__':
     print("\Input arguments:")
     for arg, value in vars(args).items():
         print(f"  {arg}: {value}")
-    dist.init_process_group("nccl", rank=args.local_rank, world_size=args.world_size)
     main(args)
     current_time = datetime.datetime.now()
     print("\nScript ends at: ", current_time.strftime("%H:%M:%S"))

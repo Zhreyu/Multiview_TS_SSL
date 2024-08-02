@@ -19,7 +19,7 @@ import torch
 from torch.utils.data import Dataset
 import mne  # Library for reading EDF files
 import random 
-
+os.environ['WANDB_DISABLED'] = 'true'
 def seed_everything(seed_value):
     torch.manual_seed(seed_value)
     random.seed(seed_value)
@@ -28,54 +28,6 @@ def seed_everything(seed_value):
     print("\nSeed is set to:", seed_value)
 
 
-class EDFDataset(Dataset):
-    def __init__(self, file_paths, chunk_len=512, overlap=124, normalization=True):
-        self.chunk_len = chunk_len
-        self.overlap = overlap
-        self.normalization = normalization
-
-        self.data = []
-        self.labels = []
-        self.data_indices = []
-
-        # Load data from EDF files and process it
-        for path in file_paths:
-            raw = mne.io.read_raw_edf(path, preload=True, verbose='ERROR')
-            data = raw.get_data()[:10]  # Get data as numpy array, selecting only the first 10 channels
-            
-            # Normalize data if needed
-            if self.normalization:
-                data -= np.mean(data, axis=1, keepdims=True)
-                data /= np.std(data, axis=1, keepdims=True)
-
-            # Determine the label from the file name
-            label = 0 if 'class1_erp' in path else 1
-            
-            # Calculate the number of chunks per file
-            M = data.shape[1]
-            stride = self.chunk_len - self.overlap
-            for start in range(0, M - self.chunk_len + 1, stride):
-                self.data.append(data[:, start:start + self.chunk_len])
-                self.labels.append(label)
-
-        self.data_indices = list(range(len(self.data)))
-
-    def __len__(self):
-        return len(self.data_indices)
-
-    def __getitem__(self, index):
-        data = self.data[index]
-        label = self.labels[index]
-        
-        # Convert data to tensor and format it correctly
-        data_tensor = torch.tensor(data, dtype=torch.float).transpose(0, 1)
-        label_tensor = torch.tensor(label, dtype=torch.long)
-
-        return data_tensor, label_tensor.unsqueeze(0)
-
-# Example usage
-file_paths = ['class1_erp.edf', 'class4_ersp.edf']
-
 
 def main(args):
     args.train_mode = 'pretrain' if args.pretrain and not args.finetune else 'finetune' if args.finetune and not args.pretrain else 'both'
@@ -83,7 +35,7 @@ def main(args):
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     filenames = read_threshold_sub(args.sub_list)
-
+    print('Number of subjects loaded:', len(filenames))
     if args.pretrain:
         
         
@@ -92,7 +44,7 @@ def main(args):
             filenames=filenames,
             sample_keys=['inputs','labels'],
             chunk_len=args.chunk_len,
-            overlap=args.ovlp,
+            overlap=0,#args.ovlp,
             root_path=args.root_path,
             normalization=args.normalization
         )
@@ -154,23 +106,23 @@ def main(args):
         all_data, event_files, subjects = load_data_bip(finetune_path)
         print('Finetuning on', len(all_data), 'subjects')
         
-        # finetune_dataset = CustomBIPDataset(
-        #     file_paths=all_data,
-        #     labels=event_files,
-        #     chunk_len=args.chunk_len,
-        #     overlap=124,
-        #     normalization=args.normalization,
-        #     standardize_epochs=args.standardize_epochs
-        # )
-        finetune_dataset = EDFDataset(file_paths, chunk_len=512, overlap=0, normalization=True)
-        labels = [sample[1] for sample in finetune_dataset] 
+        finetune_dataset = CustomBIPDataset(
+            file_paths=all_data,
+            labels=event_files,
+            chunk_len=args.chunk_len,
+            overlap=124,
+            normalization=args.normalization,
+            standardize_epochs=args.standardize_epochs
+        )
+        # finetune_dataset = EDFDataset(file_paths, chunk_len=512, overlap=0, normalization=True)
         print('Finetuning on', len(finetune_dataset), 'samples')
         for i, k in enumerate(finetune_dataset):
             print(i)
-            print(k[0].shape)
-            print(k[1].shape)
+            print('DATA : ',k[0].shape)
+            print("LABEL : ",k[1].shape)
             break
-
+        labels = np.array([label.item() for _, label in finetune_dataset])
+        print(labels)
         train_dataset, val_dataset, test_dataset = stratified_split(
             finetune_dataset, train_ratio=0.7, val_ratio=0.2, test_ratio=0.1, labels=np.array(labels)
         )
@@ -228,7 +180,11 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    
         # training arguments
+    parser.add_argument('--local_rank','--local--rank', type=int, default=0)
+    
+    parser.add_argument('--world_size', type=int, default=1)
     parser.add_argument('--job_id', type = str, default = '0')
     parser.add_argument('--seed',type=int, default=0)
     # whether or not to save finetuned models
@@ -241,12 +197,12 @@ if __name__ == '__main__':
     parser.add_argument('--train_mode', type = str)
     # data arguments
     # path to config files. Remember to change paths in config files. 
-    parser.add_argument('--data_path', type = str, default = 'sleepps18.yml')
-    parser.add_argument('--finetune_path', type = str, default = 'sleepedf.yml')
-    # whether or not to sample balanced during finetuning
-    parser.add_argument('--balanced_sampling', type = str, default = 'finetune')
-    # number of samples to finetune on. Can be list for multiple runs
-    parser.add_argument('--sample_generator', type = eval, nargs = '+', default = [10, 20, None])
+    # parser.add_argument('--data_path', type = str, default = 'sleepps18.yml')
+    # parser.add_argument('--finetune_path', type = str, default = 'sleepedf.yml')
+    # # whether or not to sample balanced during finetuning
+    # parser.add_argument('--balanced_sampling', type = str, default = 'finetune')
+    # # number of samples to finetune on. Can be list for multiple runs
+    # parser.add_argument('--sample_generator', type = eval, nargs = '+', default = [10, 20, None])
 
     # model arguments
     parser.add_argument('--layers', type = int, default = 6)
@@ -262,10 +218,10 @@ if __name__ == '__main__':
 
     # eeg arguments
     # subsample number of subjects. If set to False, use all subjects, else set to integer
-    parser.add_argument('--sample_pretrain_subjects', type = eval, default = False)
-    parser.add_argument('--sample_finetune_train_subjects', type = eval, default = False)
-    parser.add_argument('--sample_finetune_val_subjects', type = eval, default = False)
-    parser.add_argument('--sample_test_subjects', type = eval, default = False)
+    # parser.add_argument('--sample_pretrain_subjects', type = eval, default = False)
+    # parser.add_argument('--sample_finetune_train_subjects', type = eval, default = False)
+    # parser.add_argument('--sample_finetune_val_subjects', type = eval, default = False)
+    # parser.add_argument('--sample_test_subjects', type = eval, default = False)
 
     # optimizer arguments
     parser.add_argument('--loss', type = str, default = 'time_loss', )#ptions = ['time_loss', 'contrastive', 'COCOA'])
@@ -274,7 +230,7 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', type = float, default = 1e-3)
     parser.add_argument('--ft_learning_rate', type = float, default = 1e-3)
     parser.add_argument('--weight_decay', type = float, default = 5e-4)
-    parser.add_argument('--pretrain_epochs', type = int, default = 10)
+    parser.add_argument('--pretrain_epochs', type = int, default = 5)
     parser.add_argument('--finetune_epochs', type = int, default = 1)
     parser.add_argument('--batchsize', type = int, default = 128)
     parser.add_argument('--target_batchsize', type = int, default = 128)
@@ -286,7 +242,7 @@ if __name__ == '__main__':
     # Add arguments for CustomBIPDataset
     parser.add_argument('--finetune_data_paths', type=str, nargs='+', required=False, help='Paths to finetune data files')
     parser.add_argument('--chunk_len', type=int, default=512, help='Length of each chunk')
-    parser.add_argument('--num_chunks', type=int, default=34, help='Number of chunks')
+    parser.add_argument('--ft_ovlp', type=int, default=128, help='Overlap between chunks')
     parser.add_argument('--ovlp', type=int, default=51, help='Overlap between chunks')
     parser.add_argument('--normalization', type=bool, default=True, help='Whether to normalize the data')
 
@@ -302,3 +258,4 @@ if __name__ == '__main__':
     main(args)
     current_time = datetime.datetime.now()
     print("\nScript ends at: ", current_time.strftime("%H:%M:%S"))
+    cleanup()
