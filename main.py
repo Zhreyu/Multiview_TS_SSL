@@ -72,11 +72,7 @@ def main(args):
 
         num_classes = 2  
 
-        model, loss_fn = load_model(args.pretraining_setup, device, channels, time_length, num_classes, args)
 
-        if args.load_model:
-            model_path = args.pretrained_model_path
-            model.load_state_dict(torch.load(model_path, map_location=device))
         
         wandb.config.update({'Pretrain samples': len(pretrain_loader.dataset), 'Pretrain validation samples': len(pretrain_val_loader.dataset)})
         
@@ -105,11 +101,7 @@ def main(args):
 
         # List to store metrics
         metrics_list = []
-        model, _ = load_model(args.pretraining_setup, device, train_dataset[0][0].shape[1], train_dataset[0][0].shape[0], 2, args)
-        
-        if args.load_model:
-            model_path = args.pretrained_model_path
-            model.load_state_dict(torch.load(model_path, map_location=device))
+
 
         for i in range(len(all_data)):
             print(f'Fold {i+1}/{len(all_data)}')
@@ -134,6 +126,12 @@ def main(args):
                 normalization=args.normalization,
                 standardize_epochs=args.standardize_epochs
             )
+            
+            model, loss_fn = load_model(args.pretraining_setup, device, channels, time_length, num_classes, args)
+
+            if args.load_model:
+                model_path = args.pretrained_model_path
+                model.load_state_dict(torch.load(model_path, map_location=device))
 
             train_loader = DataLoader(train_dataset, batch_size=args.target_batchsize, shuffle=True, pin_memory=True, num_workers=args.num_workers)
             val_loader = DataLoader(val_dataset, batch_size=args.target_batchsize, shuffle=False, pin_memory=True, num_workers=args.num_workers)
