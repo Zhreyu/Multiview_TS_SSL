@@ -152,7 +152,12 @@ def main(args):
         
         wandb.config.update({'Pretrain samples': len(pretrain_loader.dataset), 'Pretrain validation samples': len(pretrain_val_loader.dataset)})
         
-        optimizer = AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+        if args.optimize_encoder:
+            optimizer = AdamW(model.parameters(), lr = args.ft_learning_rate, weight_decay=args.weight_decay)
+        else:
+            optimizer = AdamW(model.module.classifier.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
+            
+        # optimizer = AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         os.makedirs(output_path, exist_ok=True)
         pretrain(model,
                 pretrain_loader,
@@ -248,12 +253,12 @@ if __name__ == '__main__':
     parser.add_argument('--train_mode', type = str)
     # data arguments
     # path to config files. Remember to change paths in config files. 
-    parser.add_argument('--data_path', type = str, default = 'sleepps18.yml')
-    parser.add_argument('--finetune_path', type = str, default = 'sleepedf.yml')
-    # whether or not to sample balanced during finetuning
-    parser.add_argument('--balanced_sampling', type = str, default = 'finetune')
-    # number of samples to finetune on. Can be list for multiple runs
-    parser.add_argument('--sample_generator', type = eval, nargs = '+', default = [10, 20, None])
+    # parser.add_argument('--data_path', type = str, default = 'sleepps18.yml')
+    # parser.add_argument('--finetune_path', type = str, default = 'sleepedf.yml')
+    # # whether or not to sample balanced during finetuning
+    # parser.add_argument('--balanced_sampling', type = str, default = 'finetune')
+    # # number of samples to finetune on. Can be list for multiple runs
+    # parser.add_argument('--sample_generator', type = eval, nargs = '+', default = [10, 20, None])
 
     # model arguments
     parser.add_argument('--layers', type = int, default = 6)
@@ -269,10 +274,10 @@ if __name__ == '__main__':
 
     # eeg arguments
     # subsample number of subjects. If set to False, use all subjects, else set to integer
-    parser.add_argument('--sample_pretrain_subjects', type = eval, default = False)
-    parser.add_argument('--sample_finetune_train_subjects', type = eval, default = False)
-    parser.add_argument('--sample_finetune_val_subjects', type = eval, default = False)
-    parser.add_argument('--sample_test_subjects', type = eval, default = False)
+    # parser.add_argument('--sample_pretrain_subjects', type = eval, default = False)
+    # parser.add_argument('--sample_finetune_train_subjects', type = eval, default = False)
+    # parser.add_argument('--sample_finetune_val_subjects', type = eval, default = False)
+    # parser.add_argument('--sample_test_subjects', type = eval, default = False)
 
     # optimizer arguments
     parser.add_argument('--loss', type = str, default = 'time_loss', )#ptions = ['time_loss', 'contrastive', 'COCOA'])
