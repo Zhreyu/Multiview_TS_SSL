@@ -207,7 +207,8 @@ def main(args):
             if args.optimize_encoder:
                 optimizer = AdamW(model.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
             else:
-                optimizer = AdamW(model.classifier.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
+                optimizer = AdamW(model.module.classifier.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
+
 
             finetune(model,
                     train_loader,
