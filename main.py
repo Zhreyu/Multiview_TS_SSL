@@ -6,19 +6,16 @@ import numpy as np
 from sklearn.utils.class_weight import compute_class_weight
 import os
 import wandb
-import shutil
 from torch.utils.data import DataLoader
 from src.downstream_dataset import CustomBIPDataset
 from src.ieegdataset import IEEGDataset
-import pandas as pd
 import datetime
-from utils import check_output_path, read_threshold_sub, load_data_bip, create_readme , stratified_split
+from utils import check_output_path, read_threshold_sub, load_data_bip, create_readme  
 from rich import print
 import numpy as np
 import torch
-from torch.utils.data import Dataset
-import mne  # Library for reading EDF files
-import random 
+import random
+import csv
 os.environ['WANDB_DISABLED'] = 'true'
 def seed_everything(seed_value):
     torch.manual_seed(seed_value)
@@ -100,82 +97,86 @@ def main(args):
         os.makedirs(output_path, exist_ok=True)
         torch.save(model.state_dict(), path)
         wandb.finish()
+        print('Pretraining done. Model saved in', path)
     if args.finetune:
         print('Finetuning model')
-        finetune_path = args.finetune_path
-        all_data, event_files, subjects = load_data_bip(finetune_path)
+        all_data, event_files, subjects = load_data_bip(args.finetune_path)
         print('Finetuning on', len(all_data), 'subjects')
+
+        # List to store metrics
+        metrics_list = []
+
+        for i in range(len(all_data)):
+            train_files = all_data[:i] + all_data[i+1:]
+            val_files = [all_data[i]]
+            train_events = event_files[:i] + event_files[i+1:]
+            val_events = [event_files[i]]
+            
+            train_dataset = CustomBIPDataset(
+                file_paths=train_files,
+                labels=train_events,
+                chunk_len=args.chunk_len,
+                overlap=args.ft_ovlp,
+                normalization=args.normalization,
+                standardize_epochs=args.standardize_epochs
+            )
+            val_dataset = CustomBIPDataset(
+                file_paths=val_files,
+                labels=val_events,
+                chunk_len=args.chunk_len,
+                overlap=args.ft_ovlp,
+                normalization=args.normalization,
+                standardize_epochs=args.standardize_epochs
+            )
+
+            train_loader = DataLoader(train_dataset, batch_size=args.target_batchsize, shuffle=True, pin_memory=True, num_workers=args.num_workers)
+            val_loader = DataLoader(val_dataset, batch_size=args.target_batchsize, shuffle=False, pin_memory=True, num_workers=args.num_workers)
+
+            group = f'{args.pretraining_setup}_{args.loss}'
+            wandb.init(project='MultiView', group=group, config=args)
+            
+            if args.load_model:
+                model_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}/pretrained_model.pt'
+                model.load_state_dict(torch.load(model_path, map_location=device))
+
+            model, _ = load_model(args.pretraining_setup, device, train_dataset[0][0].shape[1], train_dataset[0][0].shape[0], 2, args)
+
+            optimizer = AdamW(model.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay) if args.optimize_encoder else AdamW(model.classifier.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
+
+            output_path = check_output_path(f'finetuned_models/MultiView_{args.pretraining_setup}_{args.loss}')
+            print('Saving finetuned outputs in', output_path)
+            
+            finetune(model, train_loader, val_loader, args.finetune_epochs, optimizer, None, device, early_stopping_criterion=args.early_stopping_criterion, backup_path=output_path)
+
+            if args.save_model:
+                save_path = f'{output_path}/finetuned_model.pt'
+                torch.save(model.state_dict(), save_path)
+
+            # Evaluate the finetuned model
+            accuracy, prec, rec, f1, auc = evaluate_classifier(model, val_loader, device)
+            wandb.config.update({'Test accuracy': accuracy, 'Test precision': prec, 'Test recall': rec, 'Test f1': f1, 'Test AUC': auc})
+            wandb.finish()
+            
+            # Append metrics to the list
+            metrics_list.append({
+                'Subject': subjects[i],
+                'Accuracy': accuracy,
+                'Precision': prec,
+                'Recall': rec,
+                'F1': f1,
+                'AUC': auc
+            })
         
-        finetune_dataset = CustomBIPDataset(
-            file_paths=all_data,
-            labels=event_files,
-            chunk_len=args.chunk_len,
-            overlap=args.ft_ovlp,
-            normalization=args.normalization,
-            standardize_epochs=args.standardize_epochs
-        )
-        # finetune_dataset = EDFDataset(file_paths, chunk_len=512, overlap=0, normalization=True)
-        print('Finetuning on', len(finetune_dataset), 'samples')
-        for i, k in enumerate(finetune_dataset):
-            print(i)
-            print('DATA : ',k[0].shape)
-            print("LABEL : ",k[1].shape)
-            break
-        labels = np.array([label.item() for _, label in finetune_dataset])
-        print(labels)
-        train_dataset, val_dataset, test_dataset = stratified_split(
-            finetune_dataset, train_ratio=0.7, val_ratio=0.2, test_ratio=0.1, labels=np.array(labels)
-        )
-
-        # DataLoaders
-        finetune_loader = DataLoader(train_dataset, batch_size=args.target_batchsize, shuffle=True,pin_memory=True,num_workers=args.num_workers)
-        finetune_val_loader = DataLoader(val_dataset, batch_size=args.target_batchsize, shuffle=False,pin_memory=True,num_workers=args.num_workers)
-        test_loader = DataLoader(test_dataset, batch_size=args.target_batchsize, shuffle=False,pin_memory=True,num_workers=args.num_workers)
-
-        # for i, k in enumerate(finetune_loader):
-        #     print(i)
-        #     print(k[0].shape)
-        #     print(k[1].shape)
-        #     break
-        group = f'{args.pretraining_setup}_{args.loss}'
-        wandb.init(project = 'MultiView', group = group, config = args)
+        # Save the metrics to a CSV file
+        metrics_file = os.path.join(output_path, 'subject_wise_metrics.csv')
+        with open(metrics_file, mode='w', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=['Subject', 'Accuracy', 'Precision', 'Recall', 'F1', 'AUC'])
+            writer.writeheader()
+            for metrics in metrics_list:
+                writer.writerow(metrics)
         
-        if args.load_model:
-            pretrained_model_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}/pretrained_model.pt'
-            model.load_state_dict(torch.load(pretrained_model_path, map_location=device))
-        
-        num_classes = 2  # binary classification for BIP dataset
-        model, _ = load_model(args.pretraining_setup, device, finetune_dataset[0][0].shape[1], finetune_dataset[0][0].shape[0], num_classes, args)
-        
-        if args.optimize_encoder:
-            optimizer = AdamW(model.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
-        else:
-            optimizer = AdamW(model.classifier.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
+        print(f'Subject-wise metrics saved to {metrics_file}')
 
-        output_path = f'finetuned_models/MultiView_{args.pretraining_setup}_{args.loss}'
-        output_path = check_output_path(output_path)
-        print('Saving finetuned outputs in', output_path)
-        
-
-        finetune(model,
-                finetune_loader,
-                finetune_val_loader,
-                args.finetune_epochs,
-                optimizer,
-                None,  # No class weights
-                device,
-                test_loader=test_loader if args.track_test_performance else None,
-                early_stopping_criterion=args.early_stopping_criterion,
-                backup_path=output_path)
-
-        if args.save_model:
-            path = f'{output_path}/finetuned_model.pt'
-            torch.save(model.state_dict(), path)
-
-        # Evaluate the finetuned model
-        accuracy, prec, rec, f1 = evaluate_classifier(model, test_loader, device)
-        wandb.config.update({'Test accuracy': accuracy, 'Test precision': prec, 'Test recall': rec, 'Test f1': f1})
-        wandb.finish()
 
 
 if __name__ == '__main__':
