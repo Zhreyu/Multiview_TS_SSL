@@ -106,11 +106,12 @@ def main(args):
         metrics_list = []
 
         for i in range(len(all_data)):
+            print(f'Fold {i+1}/{len(all_data)}')
             train_files = all_data[:i] + all_data[i+1:]
             val_files = [all_data[i]]
             train_events = event_files[:i] + event_files[i+1:]
             val_events = [event_files[i]]
-            
+            print("Valdiation File : ",val_files)
             train_dataset = CustomBIPDataset(
                 file_paths=train_files,
                 labels=train_events,
@@ -152,8 +153,8 @@ def main(args):
                 torch.save(model.state_dict(), save_path)
 
             # Evaluate the finetuned model
-            accuracy, prec, rec, f1, auc = evaluate_classifier(model, val_loader, device)
-            wandb.config.update({'Test accuracy': accuracy, 'Test precision': prec, 'Test recall': rec, 'Test f1': f1, 'Test AUC': auc})
+            accuracy, prec, rec, f1 = evaluate_classifier(model, val_loader, device)
+            wandb.config.update({'Test accuracy': accuracy, 'Test precision': prec, 'Test recall': rec, 'Test f1': f1, })
             wandb.finish()
             
             # Append metrics to the list
@@ -163,13 +164,12 @@ def main(args):
                 'Precision': prec,
                 'Recall': rec,
                 'F1': f1,
-                'AUC': auc
-            })
+                })
         
         # Save the metrics to a CSV file
         metrics_file = os.path.join(output_path, 'subject_wise_metrics.csv')
         with open(metrics_file, mode='w', newline='') as file:
-            writer = csv.DictWriter(file, fieldnames=['Subject', 'Accuracy', 'Precision', 'Recall', 'F1', 'AUC'])
+            writer = csv.DictWriter(file, fieldnames=['Subject', 'Accuracy', 'Precision', 'Recall', 'F1'])
             writer.writeheader()
             for metrics in metrics_list:
                 writer.writerow(metrics)
