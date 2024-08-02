@@ -54,8 +54,8 @@ def main(args):
         val_size = len(pretrain_dataset) - train_size
         train_dataset, val_dataset = torch.utils.data.random_split(pretrain_dataset, [train_size, val_size])
 
-        pretrain_loader = DataLoader(train_dataset, batch_size=args.batchsize, shuffle=True)
-        pretrain_val_loader = DataLoader(val_dataset, batch_size=args.batchsize, shuffle=False)
+        pretrain_loader = DataLoader(train_dataset, batch_size=args.batchsize, shuffle=True,pin_memory=True,num_workers=args.num_workers)
+        pretrain_val_loader = DataLoader(val_dataset, batch_size=args.batchsize, shuffle=False,pin_memory=True,num_workers=args.num_workers)
         
         output_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}'
         print('Saving outputs in', output_path)
@@ -128,9 +128,9 @@ def main(args):
         )
 
         # DataLoaders
-        finetune_loader = DataLoader(train_dataset, batch_size=args.target_batchsize, shuffle=True)
-        finetune_val_loader = DataLoader(val_dataset, batch_size=args.target_batchsize, shuffle=False)
-        test_loader = DataLoader(test_dataset, batch_size=args.target_batchsize, shuffle=False)
+        finetune_loader = DataLoader(train_dataset, batch_size=args.target_batchsize, shuffle=True,pin_memory=True,num_workers=args.num_workers)
+        finetune_val_loader = DataLoader(val_dataset, batch_size=args.target_batchsize, shuffle=False,pin_memory=True,num_workers=args.num_workers)
+        test_loader = DataLoader(test_dataset, batch_size=args.target_batchsize, shuffle=False,pin_memory=True,num_workers=args.num_workers)
 
         # for i, k in enumerate(finetune_loader):
         #     print(i)
@@ -234,6 +234,7 @@ if __name__ == '__main__':
     parser.add_argument('--finetune_epochs', type = int, default = 1)
     parser.add_argument('--batchsize', type = int, default = 128)
     parser.add_argument('--target_batchsize', type = int, default = 128)
+    parser.add_argument('--num_workers', type = int, default = 0)
 
     # Add new arguments for IEEGDataset
     parser.add_argument('--sub_list', type=str, required=False, help='Paths to pretrain data files')
