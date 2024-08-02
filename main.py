@@ -44,7 +44,7 @@ def main(args):
             filenames=filenames,
             sample_keys=['inputs','labels'],
             chunk_len=args.chunk_len,
-            overlap=0,#args.ovlp,
+            overlap=args.ovlp,
             root_path=args.root_path,
             normalization=args.normalization
         )
@@ -110,7 +110,7 @@ def main(args):
             file_paths=all_data,
             labels=event_files,
             chunk_len=args.chunk_len,
-            overlap=124,
+            overlap=args.ft_ovlp,
             normalization=args.normalization,
             standardize_epochs=args.standardize_epochs
         )
