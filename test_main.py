@@ -165,7 +165,7 @@ def main(args):
             
         # optimizer = AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         os.makedirs(output_path, exist_ok=True)
-        pretrain(model,
+        pretrain(model.module,
                 pretrain_loader,
                 pretrain_val_loader,
                 args.pretrain_epochs,
