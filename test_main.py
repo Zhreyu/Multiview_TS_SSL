@@ -150,6 +150,8 @@ def main(args):
         num_classes = 2  
 
         model, loss_fn = load_model(args.pretraining_setup, device, channels, time_length, num_classes, args)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
+
 
         if args.load_model:
             model.load_state_dict(torch.load(output_path, map_location=device))
