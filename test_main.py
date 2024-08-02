@@ -199,7 +199,8 @@ def main(args):
             val_loader = DataLoader(val_dataset, batch_size=args.target_batchsize,sampler=val_sampler)
 
             model, _ = load_model(args.pretraining_setup, device, finetune_dataset[0][0].shape[1], finetune_dataset[0][0].shape[0], num_classes, args)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank)
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
+
             if args.load_model:
                 pretrained_model_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}/pretrained_model.pt'
                 model.load_state_dict(torch.load(pretrained_model_path, map_location=device))
