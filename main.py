@@ -35,7 +35,7 @@ def main(args):
     if args.pretrain:
         root_path = args.root_path
         filenames = read_threshold_sub(args.sub_list)
-        filenames = [os.path.join(root_path, f) for f in filenames]\
+        filenames = [os.path.join(root_path, f) for f in filenames]
         print(filenames)
         print('Number of subjects loaded:', len(filenames))
                 
