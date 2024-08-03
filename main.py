@@ -36,7 +36,7 @@ def main(args):
         root_path = args.root_path
         filenames = read_threshold_sub(args.sub_list)
         filenames = [os.path.join(root_path, f) for f in filenames]
-        print(filenames)
+        # print(filenames)
         print('Number of subjects loaded:', len(filenames))
                 
         pretrain_dataset = IEEGDataset(
