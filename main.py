@@ -95,6 +95,7 @@ def main(args):
         wandb.finish()
         print('Pretraining done. Model saved in', path)
     if args.finetune:
+        num_classes = 2  
         print('Finetuning model')
         all_data, event_files, subjects = load_data_bip(args.finetune_data_paths)
         print('Finetuning on', len(all_data), 'subjects')
