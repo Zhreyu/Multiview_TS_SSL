@@ -125,8 +125,8 @@ def main(args):
                 standardize_epochs=args.standardize_epochs
             )
             for i,n in enumerate(train_dataset):
-                channels = n.shape[0]
-                time_length = n.shape[1]
+                channels = n.shape[0][0]
+                time_length = n.shape[0][1]
                 break
             
             model, loss_fn = load_model(args.pretraining_setup, device, channels, time_length, num_classes, args)
