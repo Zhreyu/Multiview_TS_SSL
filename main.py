@@ -33,7 +33,9 @@ def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     if args.pretrain:
+        root_path = args.root_path
         filenames = read_threshold_sub(args.sub_list)
+        filenames = [os.path.join(root_path, f) for f in filenames]
         print('Number of subjects loaded:', len(filenames))
                 
         pretrain_dataset = IEEGDataset(
@@ -71,11 +73,10 @@ def main(args):
             break
 
         num_classes = 2  
-
-
-        
         wandb.config.update({'Pretrain samples': len(pretrain_loader.dataset), 'Pretrain validation samples': len(pretrain_val_loader.dataset)})
         
+        model, loss_fn = load_model(args.pretraining_setup, device, channels, time_length, num_classes, args)
+
         optimizer = AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         os.makedirs(output_path, exist_ok=True)
         pretrain(model,
@@ -101,8 +102,6 @@ def main(args):
 
         # List to store metrics
         metrics_list = []
-
-
         for i in range(len(all_data)):
             print(f'Fold {i+1}/{len(all_data)}')
             train_files = all_data[:i] + all_data[i+1:]
@@ -179,7 +178,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     
-        # training arguments
+    # training arguments
     parser.add_argument('--local_rank','--local--rank', type=int, default=0)
     
     parser.add_argument('--world_size', type=int, default=1)
@@ -194,13 +193,6 @@ if __name__ == '__main__':
     parser.add_argument('--pretraining_setup', type = str, default = 'MPNN')
     parser.add_argument('--train_mode', type = str)
     # data arguments
-    # path to config files. Remember to change paths in config files. 
-    # parser.add_argument('--data_path', type = str, default = 'sleepps18.yml')
-    # parser.add_argument('--finetune_path', type = str, default = 'sleepedf.yml')
-    # # whether or not to sample balanced during finetuning
-    # parser.add_argument('--balanced_sampling', type = str, default = 'finetune')
-    # # number of samples to finetune on. Can be list for multiple runs
-    # parser.add_argument('--sample_generator', type = eval, nargs = '+', default = [10, 20, None])
 
     # model arguments
     parser.add_argument('--layers', type = int, default = 6)
@@ -213,13 +205,6 @@ if __name__ == '__main__':
     parser.add_argument('--out_dim', type = int, default = 64)
     parser.add_argument('--embedding_dim', type = int, default = 32)
 
-
-    # eeg arguments
-    # subsample number of subjects. If set to False, use all subjects, else set to integer
-    # parser.add_argument('--sample_pretrain_subjects', type = eval, default = False)
-    # parser.add_argument('--sample_finetune_train_subjects', type = eval, default = False)
-    # parser.add_argument('--sample_finetune_val_subjects', type = eval, default = False)
-    # parser.add_argument('--sample_test_subjects', type = eval, default = False)
 
     # optimizer arguments
     parser.add_argument('--loss', type = str, default = 'time_loss', )#ptions = ['time_loss', 'contrastive', 'COCOA'])
