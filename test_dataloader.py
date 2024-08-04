@@ -1,12 +1,24 @@
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
+# Generating and saving synthetic data
+np.random.seed(42)
+num_samples = 1000
+num_channels = 20
+signal_length = 4000
+data = np.random.rand(num_samples, num_channels, signal_length)
+labels = np.random.randint(0, 2, size=(num_samples, 1))
+np.save('synthetic_data.npy', data)
+np.save('synthetic_labels.npy', labels)
+
+# Custom dataset class
 class CustomBIPDataset(Dataset):
-    def __init__(self, file_paths, labels, chunk_len=512, overlap=124, normalization=True, standardize_epochs=False):
+    def __init__(self, file_paths, labels, chunk_len=512, overlap=124, normalization=True, standardize_epochs=False, bendr_setup=False):
         self.chunk_len = chunk_len
         self.overlap = overlap
         self.standardize_epochs = standardize_epochs
+        self.bendr_setup = bendr_setup
         self.normalization = normalization
 
         self.data = []
@@ -24,7 +36,8 @@ class CustomBIPDataset(Dataset):
             selected_rows = foundation_data[:, :9, :]
             last_row_expanded = np.expand_dims(foundation_data[:, -1, :], axis=1)
             selected_rows = np.concatenate((selected_rows, last_row_expanded), axis=1)
-
+            # selected_rows = foundation_data[np.r_[0:9, 19], :]
+            print("Selcted rows shape : ",selected_rows.shape)
             M = selected_rows.shape[0]
 
             slices = selected_rows[:, :, 3101:4001]
@@ -63,8 +76,28 @@ class CustomBIPDataset(Dataset):
             signal = np.concatenate((signal, padding), axis=1)
         
         signal = torch.tensor(signal, dtype=torch.float)
+        
+        # if self.standardize_epochs:
+        #     if self.standardize_epochs == 'total':
+        #         signal = (signal - torch.mean(signal)) / torch.std(signal)
+        #     elif self.standardize_epochs == 'channelwise':
+        #         signal = (signal - torch.mean(signal, dim=1, keepdim=True)) / torch.std(signal, dim=1, keepdim=True)
+
         label = torch.tensor(self.labels[file_idx], dtype=torch.long).unsqueeze(0)
 
         return signal, label
     
-    
+
+
+# Running everything
+dataset = CustomBIPDataset(['synthetic_data.npy'], ['synthetic_labels.npy'])
+dataloader = DataLoader(dataset, batch_size=5, shuffle=True)
+
+
+for i, n in enumerate(dataloader):
+    x, y = n
+    print(f"Batch {i + 1}:")
+    print(f"Input shape: {x.shape}, label shape: {y.shape}")
+    print(y)
+    break
+

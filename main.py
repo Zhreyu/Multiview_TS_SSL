@@ -3,7 +3,6 @@ import argparse
 from src.multiview import load_model, pretrain, finetune, evaluate_classifier
 from torch.optim import AdamW
 import numpy as np
-from sklearn.utils.class_weight import compute_class_weight
 import os
 import wandb
 from torch.utils.data import DataLoader
