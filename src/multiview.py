@@ -473,6 +473,7 @@ def finetune(model,
             x = data[0].to(device).float()
             y = data[-1].to(device).view(-1)
             out = model.forward(x, classify = True)
+            print(f"out: {out}")
             loss_ = loss(out, y)
             val_loss += loss_.item()
             collect_y.append(y.detach().cpu().numpy())
