@@ -378,6 +378,7 @@ def pretrain(model,
         if backup_path is not None:
             path = f'{backup_path}/pretrained_model.pt'
             torch.save(model.state_dict(), path)
+        
         pbar.update(1)
     pbar.close()
     cleanup()

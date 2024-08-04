@@ -22,10 +22,7 @@ class CustomBIPDataset(Dataset):
                 print(f"\nNaN values found in data: {data_path} or {label_path} !!!!!!!")
                 continue
 
-            selected_rows = foundation_data[:, :9, :]
-            last_row_expanded = np.expand_dims(foundation_data[:, -1, :], axis=1)
-            selected_rows = np.concatenate((selected_rows, last_row_expanded), axis=1)
-
+            selected_rows = foundation_data[np.r_[0:9, 19], :]
             M = selected_rows.shape[0]
 
             slices = selected_rows[:, :, 3101:4001]

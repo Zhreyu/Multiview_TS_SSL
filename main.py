@@ -87,13 +87,8 @@ def main(args):
                  backup_path=output_path,
                  loss_fn=loss_fn,
                  log=True)
-
-        model.eval()
-        path = f'{output_path}/pretrained_model.pt'
-        os.makedirs(output_path, exist_ok=True)
-        torch.save(model.state_dict(), path)
         wandb.finish()
-        print('Pretraining done. Model saved in', path)
+        print('Pretraining done. Model saved in', output_path)
     if args.finetune:
         num_classes = 2  
         print('Finetuning model')
@@ -147,7 +142,7 @@ def main(args):
             output_path = check_output_path(f'finetuned_models/MultiView_{args.pretraining_setup}_{args.loss}')
             print('Saving finetuned outputs in', output_path)
             
-            finetune(model, train_loader, val_loader, args.finetune_epochs, optimizer, None, device, early_stopping_criterion=args.early_stopping_criterion, backup_path=output_path)
+            model = finetune(model, train_loader, val_loader, args.finetune_epochs, optimizer, None, device, early_stopping_criterion=args.early_stopping_criterion, backup_path=output_path)
 
             if args.save_model:
                 save_path = f'{output_path}/finetuned_model.pt'
@@ -233,6 +228,7 @@ if __name__ == '__main__':
     parser.add_argument('--ft_ovlp', type=int, default=128, help='Overlap between chunks')
     parser.add_argument('--ovlp', type=int, default=51, help='Overlap between chunks')
     parser.add_argument('--normalization', type=bool, default=True, help='Whether to normalize the data')
+    parser.add_argument('--num_channels', type=int, default=10, help='Number of channels in the data')
 
     args = parser.parse_args()
     current_time = datetime.datetime.now()
