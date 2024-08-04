@@ -66,8 +66,7 @@ def main(args):
         for i,n in enumerate(pretrain_loader):
             channels = n.shape[0]
             time_length = n.shape[1]
-            print(i)
-            print(n.shape)
+            print("Data shape: ",n.shape)
             break
 
         num_classes = 2  
@@ -120,8 +119,13 @@ def main(args):
                 standardize_epochs=args.standardize_epochs
             )
             for i,n in enumerate(train_dataset):
-                channels = n[0].shape[0]
-                time_length = n[0].shape[1]
+                signal, label = n
+                print('Signal shape:', signal.shape)
+                print('Label Shape:', label.shape)
+                channels = signal.shape[0]
+                time_length = signal.shape[1]
+                print("Time Length: ",time_length)
+                print("Channels: ",channels)
                 break
             
             model, loss_fn = load_model(args.pretraining_setup, device, channels, time_length, num_classes, args)
