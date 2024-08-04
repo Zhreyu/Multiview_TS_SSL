@@ -277,7 +277,7 @@ if __name__ == '__main__':
     parser.add_argument('--hidden_channels', type = int, default = 256)
     parser.add_argument('--out_dim', type = int, default = 64)
     parser.add_argument('--embedding_dim', type = int, default = 32)
-
+    parser.add_argument('--num_wokers', type = int, default = 4)
 
     # eeg arguments
     # subsample number of subjects. If set to False, use all subjects, else set to integer
