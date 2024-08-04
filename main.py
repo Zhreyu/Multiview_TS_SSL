@@ -104,7 +104,7 @@ def main(args):
             val_files = [all_data[i]]
             train_events = event_files[:i] + event_files[i+1:]
             val_events = [event_files[i]]
-            print("Valdiation Subject Path: ",val_files)
+            print("Valdiation Subject : ",subjects[i])
             train_dataset = CustomBIPDataset(
                 file_paths=train_files,
                 labels=train_events,

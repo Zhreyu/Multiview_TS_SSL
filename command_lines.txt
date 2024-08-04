@@ -1,0 +1,16 @@
+Pretraining Synthetic Data:
+
+!torchrun --nproc_per_node=2  test_main.py --pretrain True  --root_path="/kaggle/input/synthaticdata/new_data/" --sub_list="/kaggle/input/synthaticdata/new_data/sub_list.csv" --finetune=False  --batchsize=128 --target_batchsize=128 --ovlp=0 --pretrain_epochs=10 --num_workers=4 
+
+Finetuning Synthetic Data:
+
+!torchrun --nproc_per_node=2  test_main.py --pretrain False  --root_path="/kaggle/input/synthaticdata/new_data/" --sub_list="/kaggle/input/synthaticdata/new_data/sub_list.csv" --finetune=True  --batchsize=1 --target_batchsize=1 --ft_ovlp=0 --finetune_epochs=10 --load_model=True --pretrained_model_path=path/to/pretrained/model 
+
+
+Pretraining Real Data:
+
+!python main.py --pretrain True  --root_path="/kaggle/input/synthaticdata/new_data/" --sub_list="/kaggle/input/synthaticdata/new_data/sub_list.csv"  --finetune=False  --batchsize=128 --target_batchsize=128 --ovlp=0  --load_model=False --num_workers=0 --pretrain_epochs=10 
+
+Finetuning Real Data:
+
+!python main.py --pretrain False --finetune_data_paths="/kaggle/input/ieegdataset/newdata1/"  --finetune=True  --batchsize=1 --target_batchsize=1 --ft_ovlp=0  --load_model=True --num_workers=0 --pretrained_model_path="/kaggle/working/Multiview_TS_SSL/pretrained_models/MultiView_MPNN_time_loss/pretrained_model.pt"  --finetune_epochs=10

@@ -233,7 +233,7 @@ def main(args):
         
         if args.save_model:
             path = f'{output_path}/finetuned_model.pt'
-                # Save or load model
+            os.makedirs(output_path, exist_ok=True)
             torch.save(model.state_dict(), path)
 
         cleanup()
