@@ -174,10 +174,7 @@ def main(args):
                 loss_fn=loss_fn,
                 log=True)
 
-        model.eval()
-        path = f'{output_path}/pretrained_model.pt'
-        os.makedirs(output_path, exist_ok=True)
-        torch.save(model.state_dict(), path)
+
         wandb.finish()
     if args.finetune:
         output_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}'
@@ -207,7 +204,7 @@ def main(args):
             model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
 
             if args.load_model:
-                pretrained_model_path = f'pretrained_models/MultiView_{args.pretraining_setup}_{args.loss}/pretrained_model.pt'
+                pretrained_model_path = args.pretrain_model_path
                 model.load_state_dict(torch.load(pretrained_model_path, map_location=device))
 
             if args.optimize_encoder:
@@ -216,7 +213,7 @@ def main(args):
                 optimizer = AdamW(model.module.classifier.parameters(), lr=args.ft_learning_rate, weight_decay=args.weight_decay)
 
 
-            finetune(model,
+            model = finetune(model,
                     train_loader,
                     val_loader,
                     args.finetune_epochs,
@@ -297,7 +294,7 @@ if __name__ == '__main__':
     parser.add_argument('--finetune_epochs', type = int, default = 1)
     parser.add_argument('--batchsize', type = int, default = 128)
     parser.add_argument('--target_batchsize', type = int, default = 128)
-
+    parser.add_argument('--pretrain_model_path', type = str, default = 'pretrained_model.pt')
     # Add new arguments for IEEGDataset
     parser.add_argument('--sub_list', type=str, required=False, help='Paths to pretrain data files')
     parser.add_argument('--root_path', type=str, default="", help='Root path for IEEGDataset')
