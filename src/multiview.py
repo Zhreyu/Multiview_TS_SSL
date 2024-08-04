@@ -479,6 +479,8 @@ def finetune(model,
             collect_pred.append(out.argmax(dim=1).detach().cpu().numpy())
         collect_y = np.concatenate(collect_y)
         collect_pred = np.concatenate(collect_pred)
+        print(f"collect_y: {collect_y}")
+        print(f"collect_pred: {collect_pred}")
         acc = balanced_accuracy_score(collect_y, collect_pred)
         prec, rec, f, _ = precision_recall_fscore_support(collect_y, collect_pred)
 
