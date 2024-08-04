@@ -480,7 +480,7 @@ def finetune(model,
         collect_y = np.concatenate(collect_y)
         collect_pred = np.concatenate(collect_pred)
         acc = balanced_accuracy_score(collect_y, collect_pred)
-        prec, rec, f, _ = precision_recall_fscore_support(collect_y, collect_pred,zero_division=0)
+        prec, rec, f, _ = precision_recall_fscore_support(collect_y, collect_pred)
 
         if test_loader is not None:
             test_acc, test_prec, test_rec, test_f = evaluate_classifier(model, test_loader, device)
@@ -535,7 +535,7 @@ def evaluate_classifier(model,
     collect_y = np.concatenate(collect_y)
     collect_pred = np.concatenate(collect_pred)
     acc = balanced_accuracy_score(collect_y, collect_pred)
-    prec, rec, f, _ = precision_recall_fscore_support(collect_y, collect_pred,zero_division=0)
+    prec, rec, f, _ = precision_recall_fscore_support(collect_y, collect_pred)
     return acc, prec, rec, f
 
 

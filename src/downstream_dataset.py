@@ -65,6 +65,6 @@ class CustomBIPDataset(Dataset):
         signal = torch.tensor(signal, dtype=torch.float)
         label = torch.tensor(self.labels[file_idx], dtype=torch.long).unsqueeze(0)
 
-        return signal, label
+        return signal.transpose(0,1), label
     
     
