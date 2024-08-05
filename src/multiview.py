@@ -14,7 +14,7 @@ def cleanup():
     if dist.is_initialized():
         dist.destroy_process_group()
     
-    
+
 class TimeClassifier(nn.Module):
     def __init__(self, in_features, num_classes, pool = 'adapt_avg', n_layers =1, orig_channels = 9, time_length = 33):
         super().__init__()
